@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Save, Plus, Trash2, Loader2, Star, AlertCircle, Calendar, CloudSun, Clock } from "lucide-react";
 import { api, DryingCycle, CyclePhoto } from "../utils/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { useLanguage } from "../utils/i18n";
 import { format, differenceInHours } from "date-fns";
 
