@@ -1,14 +1,14 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../utils/i18n';
-import { useNavigate } from 'react-router-dom'; // ← добавь этот импорт
+import { useNavigate } from 'react-router-dom'; // ← добавлен импорт
 import { Monitor, ShieldCheck, Package, Globe } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function LoginScreen() {
   const { login } = useAuth();
   const { lang, setLang } = useLanguage();
-  const navigate = useNavigate(); // ← добавь эту строку
+  const navigate = useNavigate(); // ← добавлено для переходов
 
   const toggleLang = () => {
     setLang(lang === 'ru' ? 'lt' : 'ru');
@@ -31,33 +31,66 @@ export default function LoginScreen() {
             </span>
             <Globe className="w-6 h-6 text-amber-500 ml-2" />
         </motion.button>
+
         <div className="w-full space-y-4">
           <button
             onClick={() => {
               login('operator');
-              navigate('/operator'); // ← добавь переход
+              navigate('/operator'); // ← переход для оператора
             }}
             className="group relative w-full flex items-center p-6 text-left bg-white border-2 border-transparent rounded-2xl shadow-sm hover:border-green-500 hover:shadow-md transition-all active:scale-[0.98]"
           >
-            {/* ... остальное без изменений */}
+            <div className="flex-shrink-0 p-4 bg-green-100 rounded-full group-hover:bg-green-200 transition-colors">
+              <Monitor className="w-8 h-8 text-green-700" />
+            </div>
+            <div className="ml-5">
+              <h3 className="text-xl font-bold text-gray-900">
+                {lang === 'ru' ? 'Оператор' : 'Operatorius'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {lang === 'ru' ? 'Цех сушки • Фото рецептов' : 'Džiovinimo cechas • Receptų nuotraukos'}
+              </p>
+            </div>
           </button>
+
           <button
             onClick={() => {
               login('packer');
-              navigate('/packer'); // ← добавь переход
+              navigate('/packer'); // ← переход для упаковщика
             }}
             className="group relative w-full flex items-center p-6 text-left bg-white border-2 border-transparent rounded-2xl shadow-sm hover:border-amber-500 hover:shadow-md transition-all active:scale-[0.98]"
           >
-            {/* ... остальное */}
+            <div className="flex-shrink-0 p-4 bg-amber-100 rounded-full group-hover:bg-amber-200 transition-colors">
+              <Package className="w-8 h-8 text-amber-700" />
+            </div>
+            <div className="ml-5">
+              <h3 className="text-xl font-bold text-gray-900">
+                {lang === 'ru' ? 'Лидер' : 'Lyderis'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {lang === 'ru' ? 'Упаковка • Фото результатов' : 'Pakavimas • Rezultatų nuotraukos'}
+              </p>
+            </div>
           </button>
+
           <button
             onClick={() => {
               login('admin');
-              navigate('/admin'); // ← добавь переход — это главное для админа
+              navigate('/admin'); // ← переход для администратора
             }}
             className="group relative w-full flex items-center p-6 text-left bg-white border-2 border-transparent rounded-2xl shadow-sm hover:border-gray-400 hover:shadow-md transition-all active:scale-[0.98]"
           >
-            {/* ... остальное */}
+            <div className="flex-shrink-0 p-4 bg-gray-100 rounded-full group-hover:bg-gray-200 transition-colors">
+              <ShieldCheck className="w-8 h-8 text-gray-700" />
+            </div>
+            <div className="ml-5">
+              <h3 className="text-xl font-bold text-gray-900">
+                {lang === 'ru' ? 'Администратор' : 'Administratorius'}
+              </h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {lang === 'ru' ? 'Полный доступ' : 'Pilna prieiga'}
+              </p>
+            </div>
           </button>
         </div>
       </div>
