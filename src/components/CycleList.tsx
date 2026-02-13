@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { api, DryingCycle } from "../utils/api";
 import { format, differenceInHours, subDays, parseISO, isAfter, isBefore } from "date-fns";
-import { toast } from "sonner";
+import { toast } from "sonner@2.0.3";
 import { useLanguage } from "../utils/i18n";
 import CalendarView from "./CalendarView";
 
