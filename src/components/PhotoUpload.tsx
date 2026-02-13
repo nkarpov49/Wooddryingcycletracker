@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Camera, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import { api } from "../utils/api";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 
 interface PhotoUploadProps {
   label: string;
