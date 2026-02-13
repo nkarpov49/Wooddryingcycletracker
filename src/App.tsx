@@ -14,7 +14,7 @@ import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
 import PackerView from "./components/roles/PackerView";
 
-// AdminLayout — общий заголовок для админа
+// AdminLayout — общий заголовок для всех страниц админа
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -96,7 +96,6 @@ function AppContent() {
         <Route path="/admin/new" element={<CycleForm />} />
         <Route path="/admin/cycle/:id" element={<CycleDetail />} />
         <Route path="/admin/edit/:id" element={<CycleForm />} />
-        {/* Добавь другие маршруты админа, если нужно */}
         <Route path="*" element={<CycleList />} /> {/* fallback на список */}
       </Routes>
     </AdminLayout>
