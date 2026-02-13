@@ -3,11 +3,14 @@ import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-ro
 import { Home, ArrowLeft, LogOut } from "lucide-react";
 import { Toaster } from "sonner";
 
-// Импорты UI-компонентов — теперь из ./components/ (не ui)
+// Импорты теперь из ./components/ (не ui)
 import CycleList from "./components/CycleList";
 import CycleForm from "./components/CycleForm";
 import CycleDetail from "./components/CycleDetail";
-import ScrollToTop from "./components/ScrollToTop"; // если ScrollToTop в ui — оставь ./components/ui/ScrollToTop, иначе тоже в components
+import ScrollToTop from "./components/ScrollToTop";
+import WeatherWidget from "./components/WeatherWidget";
+import CalendarView from "./components/CalendarView"; // если используешь календарь в админе
+import PhotoUpload from "./components/PhotoUpload"; // если нужно
 
 import { LanguageProvider, useLanguage } from "./utils/i18n";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -15,7 +18,7 @@ import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
 import PackerView from "./components/roles/PackerView";
 
-// AdminLayout — общий заголовок для всех страниц админа
+// AdminLayout — общий заголовок
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,7 +36,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
       <header className="bg-white shadow-sm sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           {!isHome ? (
-            <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:text-gray-900">
+            <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-gray-600 hover:text-gray-900\">
               <ArrowLeft className="w-6 h-6" />
             </button>
           ) : (
@@ -66,6 +69,7 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
       <main className="max-w-7xl mx-auto px-4 py-4">
         {children}
       </main>
@@ -82,17 +86,14 @@ function AppContent() {
 
   return (
     <Routes>
-      {/* Оператор */}
       <Route path="/operator/*" element={<OperatorView />} />
-
-      {/* Упаковщик */}
       <Route path="/packer/*" element={<PackerView />} />
 
       {/* Администратор */}
       <Route path="/admin/*" element={
         <AdminLayout>
           <Routes>
-            <Route index element={<CycleList />} /> {/* /admin — список */}
+            <Route index element={<CycleList />} /> {/* главная — список */}
             <Route path="new" element={<CycleForm />} />
             <Route path="cycle/:id" element={<CycleDetail />} />
             <Route path="edit/:id" element={<CycleForm />} />
@@ -101,7 +102,6 @@ function AppContent() {
         </AdminLayout>
       } />
 
-      {/* Fallback на логин */}
       <Route path="*" element={<LoginScreen />} />
     </Routes>
   );
