@@ -7,7 +7,8 @@ import CycleForm from "./components/CycleForm";
 import CycleDetail from "./components/CycleDetail";
 import ScrollToTop from "./components/ScrollToTop";
 import { LanguageProvider, useLanguage } from "./utils/i18n";
-import logo from 'figma:asset/32d9f34f23a4ec0005a03e8d2748df656ba8dfab.png';
+// import "figma:asset/..." — удалено для совместимости с Vite
+// backgroundImage: 'url(/placeholder.png)' // потом добавь своё изображение
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
