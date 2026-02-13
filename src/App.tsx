@@ -2,15 +2,15 @@ import React from "react";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Home, ArrowLeft, LogOut } from "lucide-react";
 import { Toaster } from "sonner";
-import CycleList from "./components/ui/CycleList";
-import CycleForm from "./components/ui/CycleForm";
-import CycleDetail from "./components/ui/CycleDetail";
-import ScrollToTop from "./components/ui/ScrollToTop";
+import CycleList from "./components/ui/CycleList.tsx";
+import CycleForm from "./components/ui/CycleForm.tsx";
+import CycleDetail from "./components/ui/CycleDetail.tsx";
+import ScrollToTop from "./components/ui/ScrollToTop.tsx";
 import { LanguageProvider, useLanguage } from "./utils/i18n";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import LoginScreen from "./components/roles/LoginScreen";
-import OperatorView from "./components/roles/OperatorView";
-import PackerView from "./components/roles/PackerView";
+import { AuthProvider, useAuth } from "./contexts/AuthContext.tsx";
+import LoginScreen from "./components/roles/LoginScreen.tsx";
+import OperatorView from "./components/roles/OperatorView.tsx";
+import PackerView from "./components/roles/PackerView.tsx";
 
 // AdminLayout — общий заголовок для всех страниц админа
 function AdminLayout({ children }: { children: React.ReactNode }) {
