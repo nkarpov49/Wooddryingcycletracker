@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, Check, Loader2, Search, X, LogOut, Package, MessageSquare, Droplets, Image as ImageIcon, Calendar, Clock, Plus, Trash2 } from 'lucide-react';
 import { api, DryingCycle } from '../../utils/api';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { format, parseISO, differenceInHours } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../utils/i18n';
