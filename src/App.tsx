@@ -1,7 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router 
-
--dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Home, ArrowLeft, LogOut } from "lucide-react";
 import { Toaster } from "sonner";
 
