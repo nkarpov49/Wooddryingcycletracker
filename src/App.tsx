@@ -2,15 +2,18 @@ import React from "react";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Home, ArrowLeft, LogOut } from "lucide-react";
 import { Toaster } from "sonner";
-import CycleList from "./components/ui/CycleList.tsx";
-import CycleForm from "./components/ui/CycleForm.tsx";
-import CycleDetail from "./components/ui/CycleDetail.tsx";
-import ScrollToTop from "./components/ui/ScrollToTop.tsx";
+
+// Импорты UI-компонентов — теперь из ./components/ (не ui)
+import CycleList from "./components/CycleList";
+import CycleForm from "./components/CycleForm";
+import CycleDetail from "./components/CycleDetail";
+import ScrollToTop from "./components/ScrollToTop"; // если ScrollToTop в ui — оставь ./components/ui/ScrollToTop, иначе тоже в components
+
 import { LanguageProvider, useLanguage } from "./utils/i18n";
-import { AuthProvider, useAuth } from "./contexts/AuthContext.tsx";
-import LoginScreen from "./components/roles/LoginScreen.tsx";
-import OperatorView from "./components/roles/OperatorView.tsx";
-import PackerView from "./components/roles/PackerView.tsx";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import LoginScreen from "./components/roles/LoginScreen";
+import OperatorView from "./components/roles/OperatorView";
+import PackerView from "./components/roles/PackerView";
 
 // AdminLayout — общий заголовок для всех страниц админа
 function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -63,7 +66,6 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-
       <main className="max-w-7xl mx-auto px-4 py-4">
         {children}
       </main>
