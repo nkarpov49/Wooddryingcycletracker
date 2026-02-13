@@ -8,14 +8,14 @@ import { format, differenceInHours } from "date-fns";
 import { toast } from "sonner";
 import { useLanguage } from "../utils/i18n";
 
-// Простая замена ImageWithFallback на стандартный img с fallback
+// Простая замена ImageWithFallback
 const ImageWithFallback: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className }) => {
   const [error, setError] = useState(false);
 
   if (error || !src) {
     return (
       <div className={`bg-gray-200 border-2 border-dashed rounded-xl flex items-center justify-center text-gray-500 ${className || ''}`}>
-        <span className="text-sm">No image</span>
+        <span className="text-sm">Нет изображения</span>
       </div>
     );
   }
@@ -54,7 +54,6 @@ export default function CycleDetail() {
       } else {
         setError(t('cyclesNotFound') || 'Цикл не найден');
         toast.error(t('cyclesNotFound') || 'Цикл не найден');
-        // НЕ возвращаем на логин — остаёмся в админе
       }
     } catch (err) {
       console.error(err);
@@ -70,7 +69,7 @@ export default function CycleDetail() {
     try {
       await api.deleteCycle(id);
       toast.success(t('delete') + " OK");
-      navigate('/admin'); // возврат в админ-список
+      navigate('/admin');
     } catch (err) {
       toast.error(t('error'));
     }
