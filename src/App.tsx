@@ -1,7 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
 import { Home, ArrowLeft, LogOut } from "lucide-react";
-import { Toaster } from "sonner@2.0.3";
+import { Toaster } from "sonner";
 import CycleList from "./components/CycleList";
 import CycleForm from "./components/CycleForm";
 import CycleDetail from "./components/CycleDetail";
