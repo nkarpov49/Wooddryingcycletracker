@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { api, DryingCycle } from "../utils/api";
 import { format, differenceInHours } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import { toast } from "sonner";
 import { useLanguage } from "../utils/i18n";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
