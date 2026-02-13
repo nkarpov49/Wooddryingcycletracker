@@ -2,13 +2,11 @@ import React from "react";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Home, ArrowLeft, LogOut } from "lucide-react";
 import { Toaster } from "sonner";
-
 import CycleList from "./components/ui/CycleList";
 import CycleForm from "./components/ui/CycleForm";
 import CycleDetail from "./components/ui/CycleDetail";
 import ScrollToTop from "./components/ui/ScrollToTop";
 import { LanguageProvider, useLanguage } from "./utils/i18n";
-
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
@@ -18,7 +16,7 @@ import PackerView from "./components/roles/PackerView";
 function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const isHome = location.pathname === "/admin" || location.pathname === "/admin/";
+  const isHome = location.pathname.startsWith("/admin");
   const { lang, setLang, t } = useLanguage();
   const { logout } = useAuth();
 
@@ -80,25 +78,30 @@ function AppContent() {
     return <LoginScreen />;
   }
 
-  if (role === 'operator') {
-    return <OperatorView />;
-  }
-
-  if (role === 'packer') {
-    return <PackerView />;
-  }
-
-  // Администратор — полный интерфейс
   return (
-    <AdminLayout>
-      <Routes>
-        <Route path="/admin" element={<CycleList />} />
-        <Route path="/admin/new" element={<CycleForm />} />
-        <Route path="/admin/cycle/:id" element={<CycleDetail />} />
-        <Route path="/admin/edit/:id" element={<CycleForm />} />
-        <Route path="*" element={<CycleList />} /> {/* fallback на список */}
-      </Routes>
-    </AdminLayout>
+    <Routes>
+      {/* Оператор */}
+      <Route path="/operator/*" element={<OperatorView />} />
+
+      {/* Упаковщик */}
+      <Route path="/packer/*" element={<PackerView />} />
+
+      {/* Администратор */}
+      <Route path="/admin/*" element={
+        <AdminLayout>
+          <Routes>
+            <Route index element={<CycleList />} /> {/* /admin — список */}
+            <Route path="new" element={<CycleForm />} />
+            <Route path="cycle/:id" element={<CycleDetail />} />
+            <Route path="edit/:id" element={<CycleForm />} />
+            <Route path="*" element={<CycleList />} /> {/* fallback */}
+          </Routes>
+        </AdminLayout>
+      } />
+
+      {/* Fallback на логин */}
+      <Route path="*" element={<LoginScreen />} />
+    </Routes>
   );
 }
 
