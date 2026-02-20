@@ -7,7 +7,7 @@ import { useLanguage } from "../utils/i18n";
 import { format, differenceInHours } from "date-fns";
 
 const WOOD_TYPES = [
-  "Birch235", "Birch285", "Alder235", "Oak235", "Ash235", "Maple235", "Scroblas235"
+  "Beržas235", "Beržas285", "JAlksnis235", "Ąžuolas235", "Uosis235", "Klevas235", "Scroblas235"
 ];
 
 const CHAMBERS = Array.from({ length: 21 }, (_, i) => i + 1);
