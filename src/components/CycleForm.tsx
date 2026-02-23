@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { ArrowLeft, Save, Plus, Trash2, Loader2, Star, AlertCircle, Calendar, CloudSun, Clock } from "lucide-react";
 import { api, DryingCycle, CyclePhoto } from "../utils/api";
 import { toast } from "sonner@2.0.3";
@@ -7,7 +7,7 @@ import { useLanguage } from "../utils/i18n";
 import { format, differenceInHours } from "date-fns";
 
 const WOOD_TYPES = [
-   "Birch235", "Birch285", "Alder235", "Oak235", "Ash235", "Maple235", "Scroblas235"
+  "Birch235", "Birch285", "Alder235", "Oak235", "Ash235", "Maple235", "Scroblas235"
 ];
 
 const CHAMBERS = Array.from({ length: 21 }, (_, i) => i + 1);

@@ -6,7 +6,7 @@ import {
   isWithinInterval, getDay
 } from 'date-fns';
 import { ru, lt } from 'date-fns/locale';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   Sun, Cloud, CloudRain, CloudSnow, CloudLightning, CloudFog, CloudSun

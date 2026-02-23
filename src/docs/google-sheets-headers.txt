@@ -1,0 +1,53 @@
+Заголовки для первой строки Google Таблицы (скопируйте и вставьте):
+
+id	chamberNumber	sequentialNumber	recipeCode	woodType	status	createdAt	startDate	customWoodType	isBaseRecipe	isTest	endDate	finalMoisture	qualityRating	overallComment	startTemperature	startWeatherCode	avgTemp	avgDayTemp	avgNightTemp	minTemp	maxTemp	recipePhotos	resultPhotos	recipePhotoPath	recipePhotoUrl
+
+---
+
+Заголовки с русскими названиями (для справки, НЕ используйте в таблице):
+
+A: id (Идентификатор)
+B: chamberNumber (Номер камеры)
+C: sequentialNumber (Порядковый номер)
+D: recipeCode (Код рецепта)
+E: woodType (Тип древесины)
+F: status (Статус)
+G: createdAt (Дата создания)
+H: startDate (Дата начала)
+I: customWoodType (Пользовательский тип)
+J: isBaseRecipe (Базовый рецепт)
+K: isTest (Тестовый)
+L: endDate (Дата окончания)
+M: finalMoisture (Конечная влажность)
+N: qualityRating (Оценка качества)
+O: overallComment (Комментарий)
+P: startTemperature (Температура на старте)
+Q: startWeatherCode (Код погоды)
+R: avgTemp (Средняя температура)
+S: avgDayTemp (Средняя дневная)
+T: avgNightTemp (Средняя ночная)
+U: minTemp (Минимальная температура)
+V: maxTemp (Максимальная температура)
+W: recipePhotos (Фото рецептов JSON)
+X: resultPhotos (Фото результатов JSON)
+Y: recipePhotoPath (Старое поле для фото)
+Z: recipePhotoUrl (Старый URL фото)
+
+---
+
+Пример заполнения новой строки (для копирования в таблицу):
+
+[оставьте пусто]	5	2024-001	БР235-45-28	Birch235	In Progress	2024-02-23T10:00:00Z	2024-02-23T10:00:00Z			FALSE	FALSE										[]	[]		
+
+Пояснения к примеру:
+- Столбец A (id) - оставьте пустым, заполнится автоматически
+- Столбец B - номер камеры (1-21)
+- Столбец C - порядковый номер вашего рецепта
+- Столбец D - код рецепта
+- Столбец E - тип дерева из списка: Birch235, Birch285, Alder235, Oak235, Ash235, Maple235, Scroblas235
+- Столбец F - всегда "In Progress" для нового цикла
+- Столбцы G и H - текущая дата и время в формате ISO
+- Столбцы I-O - оставьте пустыми для нового цикла
+- Столбцы P-V - заполнятся автоматически после синхронизации
+- Столбцы W-X - пустые массивы JSON: []
+- Столбцы Y-Z - оставьте пустыми (устаревшие поля)
