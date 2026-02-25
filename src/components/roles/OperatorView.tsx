@@ -5,7 +5,6 @@ import { toast } from 'sonner@2.0.3';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../utils/i18n';
-import { useNotifications } from './useNotifications';
 
 export default function OperatorView() {
   const { logout } = useAuth();
@@ -28,40 +27,11 @@ export default function OperatorView() {
 
   // Chambers 1-21
   const chambers = Array.from({ length: 21 }, (_, i) => i + 1);
-  
-  // 🔔 Notifications hook - уведомления каждые 2 минуты для критических камер
-  useNotifications(cycles, !selectedChamber && !loading);
 
   const fetchCycles = async () => {
     try {
       const data = await api.getCycles();
-      
-      // 🎭 MOCK DATA: Добавляем случайные проценты для демонстрации (удалить после настройки Google Sheets)
-      const enrichedData = data.map((c: any) => {
-        if (c.status === 'In Progress' && !c.endDate) {
-          // Если процент не установлен, генерируем случайное значение (для теста)
-          if (c.progressPercent === undefined) {
-            // Разные сценарии для демонстрации:
-            const chamberNum = c.chamberNumber;
-            if (chamberNum === 1) {
-              // Камера 1 - тестируем трёхзначный процент с десятичной
-              c.progressPercent = 115.5;
-            } else if (chamberNum === 2) {
-              // Камера 2 - более 100%
-              c.progressPercent = 103.2;
-            } else if (chamberNum % 7 === 0) {
-              // Каждая 7-я камера в критической зоне (99-103%)
-              c.progressPercent = 99 + Math.random() * 4;
-            } else {
-              // Остальные - случайный процент 0-100 с десятичной
-              c.progressPercent = Math.random() * 100;
-            }
-          }
-        }
-        return c;
-      });
-      
-      setCycles(enrichedData.filter((c: any) => c.status === 'In Progress' && !c.endDate));
+      setCycles(data.filter((c: any) => c.status === 'In Progress' && !c.endDate));
     } catch (e) {
       toast.error(t('error'));
     } finally {
@@ -395,28 +365,31 @@ export default function OperatorView() {
 
   // DASHBOARD VIEW
   return (
-    <div className="min-h-screen bg-gray-50 pb-10">
-      {/* Header with Reminder */}
+    <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Header with Reminder - МОБИЛЬНЫЙ */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div className="px-4 py-4">
+          <div className="flex justify-between items-center mb-3">
+            <h1 className="text-2xl font-black text-gray-900">{t('operator')}</h1>
+            <button
+              onClick={logout}
+              className="p-3 hover:bg-gray-100 rounded-full transition-colors active:bg-gray-200"
+            >
+              <LogOut className="w-6 h-6 text-gray-600" />
+            </button>
+          </div>
+        </div>
+        
         {/* Reminder Banner for Operators */}
         <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 border-b border-amber-200 px-4 sm:px-6 py-2">
           <p className="text-xs sm:text-sm font-bold text-amber-900 text-center flex items-center justify-center gap-2">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span className="leading-tight">
               {t('lang') === 'ru' 
-                ? '⚠️ ВАЖНО: При достижении 100% цикла необходимо сфотографировать рецепт!' 
-                : '⚠️ SVARBU: Pasiekus 100% ciklo, būtina nufotografuoti receptą!'}
+                ? '⚠️ ВАЖНО: Сфотографируйте рецепт перед загрузкой древесины!' 
+                : '⚠️ SVARBU: Nufotografuokite receptą prieš pakraunant medieną!'}
             </span>
           </p>
-        </div>
-        
-        {/* Main Header */}
-        <div className="px-6 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">{t('operatorTitle')}</h1>
-          <button onClick={logout} className="text-gray-500 hover:text-red-600 flex items-center gap-2 font-medium transition-colors">
-            <LogOut className="w-5 h-5" />
-            <span className="hidden sm:inline">{t('logout')}</span>
-          </button>
         </div>
       </div>
 
@@ -425,84 +398,49 @@ export default function OperatorView() {
           <Loader2 className="w-10 h-10 text-gray-400 animate-spin" />
         </div>
       ) : (
-        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {chambers.map(chamberNum => {
             const active = cycles.find(c => c.chamberNumber === chamberNum);
             const hasRecipePhoto = active && (active.recipePhotoPath || (active.recipePhotos && active.recipePhotos.length > 0));
-            
-            // Get progress percent (mock for now, will sync from Google Sheets)
-            const progress = active?.progressPercent ?? 0;
-            
-            // Critical zone: 99-103% without photo
-            const isCritical = active && progress >= 99 && progress <= 103 && !hasRecipePhoto;
-            
-            // Progress bar color - минимализм, только серый и красный
-            const getProgressBarColor = () => {
-              if (isCritical) return 'bg-red-500';
-              return 'bg-gray-800'; // Всегда темно-серый для прогресса
-            };
-            
-            // Progress bar background
-            const getProgressBgColor = () => {
-              if (isCritical) return 'bg-red-100';
-              return 'bg-gray-200';
-            };
             
             return (
               <button
                 key={chamberNum}
                 onClick={() => handleChamberClick(chamberNum)}
                 className={`
-                  relative flex flex-col items-center justify-between p-6 rounded-xl border-2 transition-all min-h-[200px]
-                  hover:shadow-lg active:scale-[0.98]
-                  ${isCritical 
-                    ? 'animate-pulse-red border-red-400 bg-red-50' 
-                    : active 
-                      ? 'bg-white border-gray-300 shadow-sm hover:border-gray-400' 
-                      : 'bg-gray-50 border-dashed border-gray-300 text-gray-400 hover:border-gray-400'}
+                  relative flex flex-col items-center justify-between p-5 sm:p-6 rounded-2xl border-2 transition-all min-h-[200px]
+                  hover:shadow-lg active:scale-[0.98] active:shadow-xl
+                  ${active 
+                    ? 'bg-white border-gray-300 shadow-sm hover:border-gray-400' 
+                    : 'bg-gray-50 border-dashed border-gray-300 text-gray-400 hover:border-gray-400'}
                 `}
               >
                 {active ? (
-                  <div className="text-center w-full flex flex-col items-center gap-4">
+                  <div className="text-center w-full flex flex-col items-center gap-3">
                     {/* Large Chamber Number */}
-                    <div className={`text-6xl font-black ${isCritical ? 'text-red-600' : 'text-gray-900'}`}>
+                    <div className="text-5xl sm:text-4xl font-black text-gray-900">
                       {chamberNum}
-                    </div>
-                    
-                    {/* Progress Bar (Horizontal) */}
-                    <div className="w-full space-y-2">
-                      <div className={`w-full h-3 rounded-full ${getProgressBgColor()} overflow-hidden`}>
-                        <div 
-                          className={`h-full rounded-full ${getProgressBarColor()} transition-all duration-700 ease-out`}
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        />
-                      </div>
-                      
-                      {/* Percentage Text */}
-                      <div className={`text-2xl font-black ${isCritical ? 'text-red-600' : 'text-gray-900'}`}>
-                        {progress.toFixed(1)}%
-                      </div>
                     </div>
                     
                     {/* Sequential Number */}
                     {active.sequentialNumber && (
-                      <div className="text-base font-bold text-gray-700">
+                      <div className="text-base sm:text-sm font-bold text-gray-700">
                         #{active.sequentialNumber}
                       </div>
                     )}
                     
                     {/* Wood Type Badge */}
-                    <span className={`px-3 py-1 rounded-lg text-sm font-bold border uppercase tracking-wide ${getWoodStyle(active.woodType)}`}>
+                    <span className={`px-3 py-1.5 sm:px-3 sm:py-1 rounded-lg text-sm sm:text-xs font-bold border uppercase tracking-wide ${getWoodStyle(active.woodType)}`}>
                         {active.woodType || t('other')}
                     </span>
                     
                     {/* Date */}
-                    <div className="text-sm text-gray-600 font-medium">
+                    <div className="text-sm sm:text-xs text-gray-600 font-medium">
                       {format(new Date(active.startDate || ''), 'dd.MM HH:mm')}
                     </div>
 
-                    {/* Photo Status Text - КРУПНЕЕ */}
-                    <div className={`text-base font-black px-4 py-2 rounded-lg ${
+                    {/* Photo Status Text */}
+                    <div className={`text-base sm:text-sm font-bold px-4 py-2 sm:px-3 sm:py-1.5 rounded-lg ${
                       hasRecipePhoto 
                         ? 'bg-green-100 text-green-800 border-2 border-green-300' 
                         : 'bg-red-100 text-red-800 border-2 border-red-300'
@@ -516,10 +454,10 @@ export default function OperatorView() {
                 ) : (
                   <div className="text-center">
                     {/* Large Chamber Number for inactive */}
-                    <div className="text-7xl font-black text-gray-300 mb-2">
+                    <div className="text-6xl sm:text-5xl font-black text-gray-300 mb-2">
                       {chamberNum}
                     </div>
-                    <div className="text-sm text-gray-400 font-medium">
+                    <div className="text-sm sm:text-xs text-gray-400 font-medium">
                       {t('lang') === 'ru' ? 'Не активна' : 'Neaktyvu'}
                     </div>
                   </div>

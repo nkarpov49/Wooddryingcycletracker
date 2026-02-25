@@ -212,7 +212,7 @@ export default function PackerViewNew() {
           <Loader2 className="w-10 h-10 text-gray-400 animate-spin" />
         </div>
       ) : (
-        <div className="p-4 space-y-6">
+        <div className="p-3 sm:p-4 space-y-6">
           {/* Current Work Section - from Google Sheets */}
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -220,11 +220,11 @@ export default function PackerViewNew() {
               {t('currentWork')} ({relevantWork.length})
             </h2>
             {relevantWork.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">
+              <div className="text-center py-8 text-gray-400 text-sm">
                 {t('currentWorkEmpty')}
               </div>
             ) : (
-              <div className={`grid gap-4 ${
+              <div className={`grid gap-3 ${
                 selectedLine === '3' 
                   ? 'grid-cols-1 max-w-2xl mx-auto' 
                   : 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto'
@@ -243,18 +243,18 @@ export default function PackerViewNew() {
 
           {/* Completed Cycles Section */}
           <div>
-            <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-3 gap-2.5">
               <h2 className="text-lg font-bold text-gray-900">
                 {t('completedCycles')} ({completedCycles.length})
               </h2>
               
-              {/* Filters */}
-              <div className="flex gap-2">
+              {/* Filters - КОМПАКТНЫЕ */}
+              <div className="flex flex-col sm:flex-row gap-2">
                 {/* Date Filter */}
                 <select
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
                 >
                   <option value="all">{t('filterAll')}</option>
                   <option value="7days">{t('filter7Days')}</option>
@@ -265,7 +265,7 @@ export default function PackerViewNew() {
                 <select
                   value={woodFilter}
                   onChange={(e) => setWoodFilter(e.target.value)}
-                  className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
                 >
                   <option value="all">{t('allWoodTypes')}</option>
                   {uniqueWoodTypes.map(wood => (
@@ -276,11 +276,11 @@ export default function PackerViewNew() {
             </div>
 
             {completedCycles.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 text-sm">
                 {t('cyclesNotFound')}
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {completedCycles.map(cycle => (
                   <PackerCycleCard key={cycle.id} cycle={cycle} onClick={() => handleViewDetails(cycle)} />
                 ))}
