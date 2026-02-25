@@ -103,7 +103,18 @@ routes.get('/health', (c) => {
 routes.get('/cycles', async (c) => {
   try {
     const cycles = await kv.getByPrefix("cycle_");
-    const signedCycles = await Promise.all(cycles.map(async (cycle: any) => {
+    
+    // Поддержка фильтрации по sequentialNumber для Google Sheets синхронизации
+    const sequentialNumber = c.req.query('sequentialNumber');
+    let filteredCycles = cycles;
+    
+    if (sequentialNumber) {
+      filteredCycles = cycles.filter((cycle: any) => 
+        cycle.sequentialNumber === sequentialNumber
+      );
+    }
+    
+    const signedCycles = await Promise.all(filteredCycles.map(async (cycle: any) => {
       return await signCycleUrls(cycle);
     }));
     signedCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -303,6 +314,107 @@ routes.post('/weather', async (c) => {
 
 // Google Sheets Sync Endpoints
 
+// НОВЫЙ: Получить текущие работы из Sheets (через POST от Apps Script)
+routes.post('/sheets/update-current-work', async (c) => {
+  try {
+    const body = await c.req.json();
+    
+    console.log('[Sheets] Получены данные о текущих работах:', body);
+    
+    // Сохраняем данные в KV store
+    await kv.set('current_work', {
+      line1: body.line1 || { rawText: '', sequentialNumber: null },
+      line2: body.line2 || { rawText: '', sequentialNumber: null },
+      line3: body.line3 || { rawText: '', sequentialNumber: null },
+      timestamp: new Date().toISOString()
+    });
+    
+    return c.json({ 
+      success: true, 
+      message: 'Данные о текущих работах обновлены' 
+    });
+    
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка обновления текущих работ:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// НОВЫЙ: Получить текущие работы (для фронтенда)
+routes.get('/sheets/current-work', async (c) => {
+  try {
+    const data = await kv.get('current_work');
+    
+    if (!data) {
+      return c.json({ 
+        currentWork: [],
+        message: 'Данные о текущих работах не найдены' 
+      });
+    }
+    
+    // Находим циклы по порядковым номерам
+    const sequentialNumbers = [
+      data.line1?.sequentialNumber,
+      data.line2?.sequentialNumber,
+      data.line3?.sequentialNumber,
+    ].filter(Boolean);
+    
+    // Получаем все циклы
+    const allCycles = await kv.getByPrefix('cycle_');
+    
+    // Создаём Map для быстрого поиска по sequentialNumber
+    const cyclesMap = new Map();
+    for (const cycle of allCycles) {
+      if (cycle.sequentialNumber) {
+        cyclesMap.set(cycle.sequentialNumber, cycle);
+      }
+    }
+    
+    // Формируем результат
+    const currentWork = [];
+    
+    if (data.line1?.sequentialNumber) {
+      currentWork.push({
+        lineId: '1',
+        sequentialNumber: data.line1.sequentialNumber,
+        rawText: data.line1.rawText,
+        cycle: cyclesMap.get(data.line1.sequentialNumber) || null
+      });
+    }
+    
+    if (data.line2?.sequentialNumber) {
+      currentWork.push({
+        lineId: '2',
+        sequentialNumber: data.line2.sequentialNumber,
+        rawText: data.line2.rawText,
+        cycle: cyclesMap.get(data.line2.sequentialNumber) || null
+      });
+    }
+    
+    if (data.line3?.sequentialNumber) {
+      currentWork.push({
+        lineId: '3',
+        sequentialNumber: data.line3.sequentialNumber,
+        rawText: data.line3.rawText,
+        cycle: cyclesMap.get(data.line3.sequentialNumber) || null
+      });
+    }
+    
+    // Подписываем URL для фото
+    for (const work of currentWork) {
+      if (work.cycle) {
+        work.cycle = await signCycleUrls(work.cycle);
+      }
+    }
+    
+    return c.json({ currentWork, timestamp: data.timestamp });
+    
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка получения текущих работ:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 // Webhook endpoint для приёма данных из Google Sheets
 // Когда оператор завершает сушку и в Google Sheets появляется новая строка,
 // Apps Script вызывает этот endpoint
@@ -313,8 +425,13 @@ routes.post('/sheets/process-row', async (c) => {
     console.log('[Sheets] Получен запрос на обработку строки:', body);
     
     // Проверяем обязательные поля
-    if (!body.rowNumber || !body.chamberNumber || !body.oldSequentialNumber || !body.newSequentialNumber) {
-      return c.json({ error: 'Отсутствуют обязательные поля' }, 400);
+    if (!body.rowNumber || !body.chamberNumber || !body.oldSequentialNumber || 
+        !body.newSequentialNumber || !body.woodTypeLithuanian || 
+        !body.oldCycleEndDate || !body.newCycleStartDate) {
+      return c.json({ 
+        error: 'Отсутствуют обязательные поля',
+        required: ['rowNumber', 'chamberNumber', 'woodTypeLithuanian', 'oldSequentialNumber', 'oldCycleEndDate', 'newSequentialNumber', 'newCycleStartDate']
+      }, 400);
     }
     
     // Проверяем, не была ли строка уже обработана
@@ -329,7 +446,6 @@ routes.post('/sheets/process-row', async (c) => {
     }
     
     // Запускаем обработку в фоне (не блокируем ответ)
-    // Процесс может занять 2-3 минуты из-за задержки
     processSheetRow(body)
       .then(() => {
         markRowAsProcessed(body.rowNumber, body);
@@ -343,8 +459,7 @@ routes.post('/sheets/process-row', async (c) => {
     return c.json({ 
       success: true, 
       message: 'Обработка строки запущена',
-      rowNumber: body.rowNumber,
-      estimatedTime: '2-3 минуты'
+      rowNumber: body.rowNumber
     });
     
   } catch (error: any) {
@@ -353,12 +468,17 @@ routes.post('/sheets/process-row', async (c) => {
   }
 });
 
-// Получить логи последних синхронизаций
+// Получить последние логи синхронизации
 routes.get('/sheets/sync-logs', async (c) => {
   try {
     const limit = parseInt(c.req.query('limit') || '10');
     const logs = await getRecentSyncLogs(limit);
-    return c.json({ logs, count: logs.length });
+    
+    return c.json({ 
+      success: true,
+      logs,
+      count: logs.length
+    });
   } catch (error: any) {
     console.error('[Sheets] Ошибка получения логов:', error);
     return c.json({ error: error.message }, 500);
@@ -369,16 +489,159 @@ routes.get('/sheets/sync-logs', async (c) => {
 routes.get('/sheets/row-status/:rowNumber', async (c) => {
   try {
     const rowNumber = parseInt(c.req.param('rowNumber'));
+    
+    console.log(`[Sheets] Проверка статуса строки ${rowNumber}`);
+    
+    // Проверяем через kv.get
+    const kvResult = await kv.get(`processed_row_${rowNumber}`);
+    console.log(`[Sheets] kv.get результат:`, kvResult);
+    
+    // Проверяем напрямую через Supabase
+    const { data, error } = await supabase
+      .from("kv_store_c5bcdb1f")
+      .select("key, value")
+      .eq("key", `processed_row_${rowNumber}`)
+      .single();
+    
+    console.log(`[Sheets] Supabase прямой запрос:`, data, error);
+    
     const processed = await isRowProcessed(rowNumber);
     
-    if (processed) {
-      const details = await kv.get(`processed_row_${rowNumber}`);
-      return c.json({ processed: true, details });
-    }
-    
-    return c.json({ processed: false });
+    return c.json({ 
+      processed,
+      kvResult,
+      supabaseData: data,
+      supabaseError: error?.message
+    });
   } catch (error: any) {
     console.error('[Sheets] Ошибка проверки статуса строки:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Сброс статуса обработки строки (для повторного тестирования)
+routes.delete('/sheets/reset-row/:rowNumber', async (c) => {
+  try {
+    const rowNumber = parseInt(c.req.param('rowNumber'));
+    
+    console.log(`[Sheets] Сброс статуса строки ${rowNumber}`);
+    
+    // Удаляем метку обработки
+    await kv.del(`processed_row_${rowNumber}`);
+    
+    return c.json({ 
+      success: true, 
+      message: `Статус строки ${rowNumber} сброшен. Теперь её можно обработать снова.` 
+    });
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка сброса статуса строки:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Получить список всех обработанных строк
+routes.get('/sheets/processed-rows', async (c) => {
+  try {
+    console.log('[Sheets] Запрос на получение обработанных строк');
+    
+    // Используем прямой запрос к базе через service role
+    const { data, error } = await supabase
+      .from("kv_store_c5bcdb1f")
+      .select("key, value")
+      .like("key", "processed_row_%");
+    
+    if (error) {
+      console.error('[Sheets] Ошибка получения строк из БД:', error);
+      return c.json({ error: `Database error: ${error.message}` }, 500);
+    }
+    
+    console.log(`[Sheets] Найдено ${data?.length || 0} обработанных строк`);
+    
+    const rows = (data || []).map((item: any) => {
+      const rowNumber = parseInt(item.key?.replace('processed_row_', '') || '0');
+      return {
+        rowNumber,
+        processedAt: item.value?.processedAt,
+        details: item.value?.details
+      };
+    }).sort((a: any, b: any) => b.rowNumber - a.rowNumber);
+    
+    console.log('[Sheets] Возвращаем данные клиенту');
+    return c.json({ rows, count: rows.length });
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка получения обработанных строк:', error);
+    return c.json({ error: error.message || 'Unknown error' }, 500);
+  }
+});
+
+// Очистить все обработанные строки (для массового тестирован��я)
+routes.post('/sheets/clear-processed', async (c) => {
+  try {
+    console.log('[Sheets] Очистка всех обработанных строк');
+    
+    // Получаем все ключи processed_row_*
+    const allRows = await kv.getByPrefix('processed_row_');
+    
+    // Удаляем все метки
+    for (const row of allRows) {
+      await kv.del(row.key);
+    }
+    
+    return c.json({ 
+      success: true, 
+      message: `Очищено ${allRows.length} обработанных строк`,
+      count: allRows.length
+    });
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка очистки обработанных строк:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// НОВЫЙ: Удалить дубликаты циклов по порядковому номеру (оставить только последний)
+routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
+  try {
+    const sequentialNumber = c.req.param('sequentialNumber');
+    
+    console.log(`[Sheets] Удаление дубликатов для цикла ${sequentialNumber}`);
+    
+    // Находим все циклы с этим порядковым номером
+    const allCycles = await kv.getByPrefix('cycle_');
+    const duplicates = allCycles
+      .filter(item => item.value && item.value.sequentialNumber === sequentialNumber) // Проверяем что value существует
+      .map(item => ({ key: item.key, cycle: item.value })) // Сохраняем и ключ и значение
+      .sort((a, b) => new Date(b.cycle.startDate).getTime() - new Date(a.cycle.startDate).getTime()); // Сортируем по дате (новые первые)
+    
+    if (duplicates.length <= 1) {
+      return c.json({
+        success: true,
+        message: 'Дубликатов не найдено',
+        found: duplicates.length
+      });
+    }
+    
+    // Оставляем только ПОСЛЕДНИЙ (самый новый), удаляем остальные
+    const toKeep = duplicates[0];
+    const toDelete = duplicates.slice(1);
+    
+    console.log(`[Sheets] Найдено ${duplicates.length} циклов. Оставляем ${toKeep.cycle.id}, удаляем ${toDelete.length}`);
+    
+    // Удаляем дубликаты (используем правильный ключ cycle_${id})
+    for (const item of toDelete) {
+      await kv.del(item.key); // Используем оригинальный ключ из БД
+      console.log(`[Sheets] Удалён дубликат: ${item.cycle.id} (ключ: ${item.key})`);
+    }
+    
+    return c.json({
+      success: true,
+      message: `Удалено ${toDelete.length} дубликатов. Оставлен цикл от ${new Date(toKeep.cycle.startDate).toLocaleString()}`,
+      kept: toKeep.cycle,
+      deleted: toDelete.length,
+      total: duplicates.length
+    });
+    
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка удаления дубликатов:', error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -402,6 +665,73 @@ routes.post('/sheets/manual-sync', async (c) => {
     
   } catch (error: any) {
     console.error('[Sheets] Ошибка ручной синхронизации:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// **NEW**: Синхронизация процентов завершения из Google Sheets (каждые 15 мин)
+// Вызывается по расписанию (каждые 15 минут) из Google Apps Script
+// Формат: { "1": 45.5, "2": 78.3, "3": 99.0, ... "21": 115.5 }
+routes.post('/sheets/sync-progress', async (c) => {
+  try {
+    const body = await c.req.json();
+    console.log('[Sheets] Получены проценты завершения:', body);
+    
+    // Валидация: должен быть объект с числами от 1 до 21 как ключами
+    if (typeof body !== 'object' || Array.isArray(body)) {
+      return c.json({ error: 'Неверный формат данных. Ожидается объект { "1": percent, "2": percent, ... }' }, 400);
+    }
+    
+    const updates: Array<{ chamber: number, progress: number, success: boolean, error?: string }> = [];
+    
+    // Обновляем каждую камеру
+    for (const [chamberStr, progressPercent] of Object.entries(body)) {
+      const chamberNum = parseInt(chamberStr);
+      const progress = typeof progressPercent === 'number' ? progressPercent : parseFloat(progressPercent as string);
+      
+      // Валидация
+      if (isNaN(chamberNum) || chamberNum < 1 || chamberNum > 21 || isNaN(progress)) {
+        updates.push({ chamber: chamberNum, progress, success: false, error: 'Invalid data' });
+        continue;
+      }
+      
+      try {
+        // Найти активный цикл для этой камеры
+        const cycles = await kv.getByPrefix(`cycle_`);
+        const activeCycle = cycles.find((c: any) => 
+          c.chamberNumber === chamberNum && 
+          c.status === 'In Progress' && 
+          !c.endDate
+        );
+        
+        if (activeCycle) {
+          // Обновляем процент (сохраняем с одним знаком после запятой)
+          const roundedProgress = Math.round(progress * 10) / 10;
+          activeCycle.progressPercent = roundedProgress;
+          await kv.set(`cycle_${activeCycle.id}`, activeCycle);
+          updates.push({ chamber: chamberNum, progress: roundedProgress, success: true });
+          console.log(`[Sheets] Камера ${chamberNum}: обновлен процент до ${roundedProgress}%`);
+        } else {
+          // Нет активного цикла - пропускаем
+          updates.push({ chamber: chamberNum, progress, success: false, error: 'No active cycle' });
+        }
+      } catch (err: any) {
+        console.error(`[Sheets] Ошибка обновления камеры ${chamberNum}:`, err);
+        updates.push({ chamber: chamberNum, progress, success: false, error: err.message });
+      }
+    }
+    
+    const successCount = updates.filter(u => u.success).length;
+    console.log(`[Sheets] Синхронизация процентов завершена: ${successCount}/${updates.length} успешно`);
+    
+    return c.json({ 
+      success: true, 
+      message: `Обновлено ${successCount} из ${updates.length} камер`,
+      updates 
+    });
+    
+  } catch (error: any) {
+    console.error('[Sheets] Ошибка синхронизации процентов:', error);
     return c.json({ error: error.message }, 500);
   }
 });

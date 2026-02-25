@@ -5,7 +5,7 @@ import { LanguageProvider } from "./utils/i18n";
 import { Toaster } from "sonner@2.0.3";
 import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
-import PackerView from "./components/roles/PackerView";
+import PackerViewNew from "./components/roles/PackerViewNew";
 import CycleList from "./components/CycleList";
 import CycleForm from "./components/CycleForm";
 import CycleDetail from "./components/CycleDetail";
@@ -27,7 +27,7 @@ function MainRoute() {
     
     if (!role) return <LoginScreen />;
     if (role === 'operator') return <OperatorView />;
-    if (role === 'packer') return <PackerView />;
+    if (role === 'packer') return <PackerViewNew />;
     
     // Admin
     return (
@@ -42,7 +42,7 @@ function AdminRoute({ Component }: { Component: React.ComponentType }) {
     
     if (!role) return <LoginScreen />;
     if (role === 'operator') return <OperatorView />; // Or redirect?
-    if (role === 'packer') return <PackerView />;
+    if (role === 'packer') return <PackerViewNew />;
     
     return (
         <AdminLayout>

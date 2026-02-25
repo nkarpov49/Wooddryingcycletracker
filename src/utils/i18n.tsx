@@ -87,6 +87,39 @@ const translations: Translations = {
   noPhotoShort: { ru: "Нет фото", lt: "Nėra foto" },
   notEnteredShort: { ru: "Не внесено", lt: "Neįvesta" },
   hasComment: { ru: "Есть комментарий", lt: "Yra komentaras" },
+  // Operator View
+  operatorTitle: { ru: "Оператор. Фото рецептов", lt: "Operatorius. Recepto nuotraukos" },
+  free: { ru: "Свободно", lt: "Laisva" },
+  takeSettingsPhoto: { ru: "Сфотографируйте экран настроек", lt: "Nufotografuokite nustatymų ekraną" },
+  takePhoto: { ru: "Сфотографировать рецепт", lt: "Nufotografuoti receptą" },
+  chooseFromGallery: { ru: "Выбрать из галереи", lt: "Pasirinkti iš galerijos" },
+  photosTaken: { ru: "Сделано фото", lt: "Padaryta nuotraukų" },
+  done: { ru: "Готово", lt: "Atlikta" },
+  addMore: { ru: "Добавить", lt: "Pridėti" },
+  existingPhotos: { ru: "Существующие фото", lt: "Esamos nuotraukos" },
+  newPhotos: { ru: "Новые фото", lt: "Naujos nuotraukos" },
+  logout: { ru: "Выход", lt: "Atsijungti" },
+  // Packer/Leader Line Selection
+  selectLine: { ru: "Выберите линию", lt: "Pasirinkite liniją" },
+  line1And2: { ru: "1 и 2 линия", lt: "1 ir 2 linija" },
+  line3: { ru: "3 линия", lt: "3 linija" },
+  leaderLine1And2Title: { ru: "Лидер • 1 и 2 линия", lt: "Lyderis • 1 ir 2 linija" },
+  leaderLine3Title: { ru: "Лидер • 3 линия", lt: "Lyderis • 3 linija" },
+  activeChambers: { ru: "Активные камеры", lt: "Aktyvios džiovyklos" },
+  completedCycles: { ru: "Завершённые циклы", lt: "Užbaigti ciklai" },
+  leaderInstructions: { ru: "Просматривайте активные сушки и завершённые циклы", lt: "Peržiūrėkite aktyvius džiovinimus ir užbaigtus ciklus" },
+  filterByDate: { ru: "По дате выгрузки", lt: "Pagal iškrovimo datą" },
+  filterByWood: { ru: "По породе", lt: "Pagal medieną" },
+  unloadDate: { ru: "Дата выгрузки", lt: "Iškrovimo data" },
+  allWoodTypes: { ru: "Все породы", lt: "Visos rūšys" },
+  currentWork: { ru: "Сейчас в работе", lt: "Dabar vyksta" },
+  currentWorkEmpty: { ru: "Нет активных работ", lt: "Nėra aktyvių darbų" },
+  addComment: { ru: "Добавить комментарий", lt: "Pridėti komentarą" },
+  addResultPhoto: { ru: "Добавить фото результата", lt: "Pridėti rezultato nuotrauką" },
+  viewDetails: { ru: "Смотреть детали", lt: "Peržiūrėti detales" },
+  notFoundInDatabase: { ru: "Не найдено в базе", lt: "Nerasta duomenų bazėje" },
+  cancel: { ru: "Отмена", lt: "Atšaukti" },
+  dataUpdated: { ru: "Данные обновлены", lt: "Duomenys atnaujinti" },
 };
 
 type LanguageContextType = {
@@ -98,14 +131,22 @@ type LanguageContextType = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Language>('ru');
+  const [lang, setLang] = useState<Language>(() => {
+    // Load saved language from localStorage or default to 'ru'
+    return (localStorage.getItem('wood_app_lang') as Language) || 'ru';
+  });
+
+  const handleSetLang = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem('wood_app_lang', newLang);
+  };
 
   const t = (key: string) => {
     return translations[key]?.[lang] || key;
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
+    <LanguageContext.Provider value={{ lang, setLang: handleSetLang, t }}>
       {children}
     </LanguageContext.Provider>
   );

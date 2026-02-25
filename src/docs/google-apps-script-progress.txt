@@ -1,0 +1,120 @@
+// Google Apps Script для синхронизации процентов завершения
+// Настройка: Расширения → Apps Script
+// Добавить триггер: каждые 15 минут (Edit → Current project's triggers → Add Trigger)
+
+// ============================================
+// НАСТРОЙКИ
+// ============================================
+
+// URL вашего Supabase проекта (ОБЯЗАТЕЛЬНО ЗАМЕНИТЕ!)
+const SUPABASE_URL = 'https://ваш-project-id.supabase.co';
+
+// Supabase Anonymous Key (ОБЯЗАТЕЛЬНО ЗАМЕНИТЕ!)
+// Найдите его в: Supabase Dashboard → Project Settings → API → anon public
+const SUPABASE_ANON_KEY = 'ваш-anon-key-здесь';
+
+// Ячейки с процентами для каждой камеры
+// ВАЖНО: Здесь указаны ЯЧЕЙКИ, а не диапазон!
+// Формула =(now()-$C$6)/((vlookup($C$4;Standartai!$B$5:$E;4;false))/24)
+// возвращает дробное число (0.592 = 59.2%), скрипт умножит на 100 автоматически
+const CHAMBER_CELLS = [
+  'C9',   // Камера 1
+  'E9',   // Камера 2
+  'G9',   // Камера 3
+  'I9',   // Камера 4
+  'K9',   // Камера 5
+  'M9',   // Камера 6
+  'O9',   // Камера 7
+  'Q9',   // Камера 8
+  'S9',   // Камера 9
+  'U9',   // Камера 10
+  'W9',   // Камера 11
+  'Y9',   // Камера 12
+  'AA9',  // Камера 13
+  'AC9',  // Камера 14
+  'AE9',  // Камера 15
+  'AG9',  // Камера 16
+  'AI9',  // Камера 17
+  'AK9',  // Камера 18
+  'AM9',  // Камера 19
+  'AO9',  // Камера 20
+  'AQ9'   // Камера 21
+];
+
+// ============================================
+// ОСНОВНАЯ ФУНКЦИЯ
+// ============================================
+
+function syncProgressToApp() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet(); // или ss.getSheetByName('Название листа');
+  
+  try {
+    // Формируем объект: { "1": 45, "2": 78, ... "21": 12 }
+    const progressData = {};
+    
+    for (let i = 0; i < CHAMBER_CELLS.length; i++) {
+      const chamberNumber = i + 1;
+      const cellAddress = CHAMBER_CELLS[i];
+      
+      // Получаем ЗНАЧЕНИЕ ячейки (результат формулы, а не саму формулу)
+      let percentValue = sheet.getRange(cellAddress).getValue();
+      
+      // ВАЖНО: Google Sheets хранит проценты как дробные числа (0.59 = 59%)
+      // Формула =(now()-$C$6)/((vlookup($C$4;Standartai!$B$5:$E;4;false))/24)
+      // возвращает дробное число, которое нужно умножить на 100
+      
+      if (typeof percentValue === 'number') {
+        // Это дробное число от формулы - умножаем на 100
+        percentValue = percentValue * 100;
+      } else if (typeof percentValue === 'string') {
+        // Если это строка с символом %, убираем его
+        percentValue = percentValue.replace('%', '').replace(',', '.').trim();
+        percentValue = parseFloat(percentValue);
+      } else {
+        // Пустая ячейка или ошибка
+        percentValue = 0;
+      }
+      
+      // Проверяем что это валидное число
+      if (!isNaN(percentValue) && isFinite(percentValue)) {
+        // Округляем до 1 знака после запятой
+        progressData[chamberNumber] = Math.round(percentValue * 10) / 10;
+      } else {
+        // Если значение невалидное, устанавливаем 0
+        progressData[chamberNumber] = 0;
+      }
+    }
+    
+    Logger.log('Отправка процентов: ' + JSON.stringify(progressData));
+    
+    // Отправляем данные на сервер
+    const url = SUPABASE_URL + '/functions/v1/make-server-c5bcdb1f/sheets/sync-progress';
+    
+    const options = {
+      'method': 'post',
+      'contentType': 'application/json',
+      'payload': JSON.stringify(progressData),
+      'muteHttpExceptions': true,
+      'headers': {
+        'apikey': SUPABASE_ANON_KEY
+      }
+    };
+    
+    const response = UrlFetchApp.fetch(url, options);
+    const responseCode = response.getResponseCode();
+    const responseText = response.getContentText();
+    
+    if (responseCode === 200) {
+      const result = JSON.parse(responseText);
+      Logger.log('✅ Синхронизация успешна: ' + result.message);
+      Logger.log('Обновлено камер: ' + result.updates.filter(u => u.success).length);
+    } else {
+      Logger.log('❌ Ошибка синхронизации: ' + responseCode);
+      Logger.log('Ответ сервера: ' + responseText);
+    }
+    
+  } catch (error) {
+    Logger.log('❌ Ошибка выполнения: ' + error.toString());
+  }
+}

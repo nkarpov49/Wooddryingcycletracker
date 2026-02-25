@@ -38,7 +38,7 @@ export default function CycleList() {
   const [searchQuery, setSearchQuery] = useState(storedState?.searchQuery || "");
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   
-  const [activeTab, setActiveTab] = useState<'actual' | 'archive' | 'calendar'>(storedState?.activeTab || 'actual');
+  const [activeTab, setActiveTab] = useState<'actual' | 'calendar'>(storedState?.activeTab || 'actual');
   
   // Changed activeFilter (string) to activeFilters (string[])
   const [activeFilters, setActiveFilters] = useState<string[]>(storedState?.activeFilters || []);
@@ -70,12 +70,24 @@ export default function CycleList() {
   // Load Data
   useEffect(() => {
     loadCycles();
+    
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(() => {
+      loadCycles(true); // Pass true to skip toast on auto-refresh
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  async function loadCycles() {
+  async function loadCycles(silent = false) {
     try {
       const data = await api.getCycles();
-      setCycles(data);
+      
+      // Only update if data changed
+      setCycles(prevCycles => {
+        const hasChanged = JSON.stringify(data) !== JSON.stringify(prevCycles);
+        return hasChanged ? data : prevCycles;
+      });
     } catch (err) {
       console.error(err);
       toast.error(t('error'));
@@ -330,14 +342,6 @@ export default function CycleList() {
             }`}
           >
               {t('tabActual')}
-          </button>
-          <button 
-            onClick={() => setActiveTab('archive')}
-            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
-                activeTab === 'archive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-              {t('tabArchive')}
           </button>
           <button 
             onClick={() => setActiveTab('calendar')}

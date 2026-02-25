@@ -37,6 +37,16 @@ export interface DryingCycle {
   avgNightTemp?: number;
   minTemp?: number;
   maxTemp?: number;
+  
+  // Progress (from Google Sheets)
+  progressPercent?: number; // 0-100
+}
+
+export interface CurrentWorkCycle {
+  lineId: '1' | '2' | '3';
+  sequentialNumber: string;
+  rawText: string;
+  cycle: DryingCycle | null;
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
@@ -109,5 +119,10 @@ export const api = {
       throw new Error('Upload failed');
     }
     return response.json();
-  }
+  },
+  
+  getCurrentWork: async (): Promise<CurrentWorkCycle[]> => {
+    const response = await fetchWithAuth(`${BASE_URL}/sheets/current-work`);
+    return response.currentWork || [];
+  },
 };

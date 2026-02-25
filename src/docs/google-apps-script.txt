@@ -1,0 +1,577 @@
+/**
+ * Google Apps Script для автоматической синхронизации Google Sheets с приложением
+ * 
+ * При добавлении/редактировании строки автоматически:
+ * 1. Закрывает старый цикл сушки
+ * 2. Создаёт новый цикл с данными из таблицы
+ * 3. Загружает погодные данные из Open-Meteo API
+ */
+
+// ============================================================================
+// НАСТРОЙКИ
+// ============================================================================
+
+const URL_WEBHOOK = 'https://zzteuolgibfbulqdavof.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/process-row';
+const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6dGV1b2xnaWJmYnVscWRhdm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4NTA0NjgsImV4cCI6MjA4NTQyNjQ2OH0.mXYRfFM9csWjPXirW0nY10vz5hhDTj4EAeugrwRp_5A';
+const SHEET_NAME = 'events';  // Имя листа с данными для синхронизации
+
+// Номера столбцов в листе "events"
+const COLUMNS = {
+  CHAMBER_NUMBER: 2,           // B - Номер камеры (1-21)
+  OLD_SEQUENTIAL_NUMBER: 3,    // C - Старый порядковый номер
+  OLD_END_DATE: 4,             // D - Дата окончания старого цикла
+  NEW_SEQUENTIAL_NUMBER: 5,    // E - Новый порядковый номер
+  NEW_START_DATE: 6,           // F - Дата начала нового цикла
+  WOOD_TYPE: 7                 // G - Порода (литовское название)
+};
+
+// ============================================================================
+// АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ
+// ============================================================================
+
+/**
+ * Автоматический триггер при редактировании таблицы
+ * Запускается при добавлении/изменении строки
+ */
+function onEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  
+  // Работаем только с листом "events"
+  if (sheet.getName() !== SHEET_NAME) {
+    return;
+  }
+  
+  const row = e.range.getRow();
+  
+  // Пропускаем заголовок
+  if (row === 1) {
+    return;
+  }
+  
+  // Если строка заполнена - синхронизируем
+  if (isRowComplete(sheet, row)) {
+    Logger.log(`✏️ Строка ${row} заполнена - запуск синхронизации`);
+    processRow(sheet, row);
+  }
+}
+
+/**
+ * Создаёт меню "Синхронизация" при открытии таблицы
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('🔄 Синхронизация')
+    .addItem('📤 Синхронизировать последнюю строку', 'syncLastRowFromMenu')
+    .addItem('📤 Синхронизировать все строки', 'syncAllFromMenu')
+    .addSeparator()
+    .addItem('📋 Посмотреть логи', 'ViewLogs')
+    .addItem('⚙️ Проверить настройки', 'CheckConfig')
+    .addToUi();
+}
+
+/**
+ * Синхронизация последней строки из меню
+ */
+function syncLastRowFromMenu() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    ui.alert('❌ Ошибка', `Лист "${SHEET_NAME}" не найден!`, ui.ButtonSet.OK);
+    return;
+  }
+  
+  const lastRow = sheet.getLastRow();
+  
+  if (lastRow <= 1) {
+    ui.alert('⚠️ Внимание', 'Нет данных для синхронизации', ui.ButtonSet.OK);
+    return;
+  }
+  
+  // Проверяем что строка заполнена
+  if (!isRowComplete(sheet, lastRow)) {
+    ui.alert('⚠️ Внимание', 'Последняя строка заполнена не полностью!', ui.ButtonSet.OK);
+    return;
+  }
+  
+  // Отправляем
+  Logger.log(`📤 Синхронизация строки ${lastRow} из меню`);
+  processRow(sheet, lastRow);
+  
+  ui.alert('✅ Успешно', `Строка ${lastRow} синхронизирована!\nПроверьте приложение.`, ui.ButtonSet.OK);
+}
+
+/**
+ * Синхронизация всех строк из меню
+ */
+function syncAllFromMenu() {
+  const ui = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    ui.alert('❌ Ошибка', `Лист "${SHEET_NAME}" не найден!`, ui.ButtonSet.OK);
+    return;
+  }
+  
+  const response = ui.alert(
+    '⚠️ Подтверждение',
+    'Синхронизировать все заполненные строки?',
+    ui.ButtonSet.YES_NO
+  );
+  
+  if (response !== ui.Button.YES) {
+    return;
+  }
+  
+  SyncAllNew();
+  
+  ui.alert('✅ Готово', 'Синхронизация завершена!\nСмотрите логи для деталей.', ui.ButtonSet.OK);
+}
+
+/**
+ * Проверяет что все обязательные поля заполнены
+ */
+function isRowComplete(sheet, row) {
+  const chamberNumber = sheet.getRange(row, COLUMNS.CHAMBER_NUMBER).getValue();
+  const woodType = sheet.getRange(row, COLUMNS.WOOD_TYPE).getValue();
+  const oldSeqNum = sheet.getRange(row, COLUMNS.OLD_SEQUENTIAL_NUMBER).getValue();
+  const oldEndDate = sheet.getRange(row, COLUMNS.OLD_END_DATE).getValue();
+  const newSeqNum = sheet.getRange(row, COLUMNS.NEW_SEQUENTIAL_NUMBER).getValue();
+  const newStartDate = sheet.getRange(row, COLUMNS.NEW_START_DATE).getValue();
+  
+  return chamberNumber !== '' && woodType !== '' && oldSeqNum !== '' && 
+         oldEndDate !== '' && newSeqNum !== '' && newStartDate !== '';
+}
+
+/**
+ * Обрабатывает строку и отправляет на сервер
+ */
+function processRow(sheet, row) {
+  try {
+    const data = {
+      rowNumber: row,
+      chamberNumber: parseInt(sheet.getRange(row, COLUMNS.CHAMBER_NUMBER).getValue()),
+      woodTypeLithuanian: sheet.getRange(row, COLUMNS.WOOD_TYPE).getValue().toString().trim(),
+      oldSequentialNumber: sheet.getRange(row, COLUMNS.OLD_SEQUENTIAL_NUMBER).getValue().toString().trim(),
+      oldCycleEndDate: formatDate(sheet.getRange(row, COLUMNS.OLD_END_DATE).getValue()),
+      newSequentialNumber: sheet.getRange(row, COLUMNS.NEW_SEQUENTIAL_NUMBER).getValue().toString().trim(),
+      newCycleStartDate: formatDate(sheet.getRange(row, COLUMNS.NEW_START_DATE).getValue())
+    };
+    
+    // Валидация
+    if (data.chamberNumber < 1 || data.chamberNumber > 21) {
+      Logger.log(`❌ Некорректный номер камеры: ${data.chamberNumber}`);
+      return;
+    }
+    
+    if (!/^\d{4}$/.test(data.oldSequentialNumber) || !/^\d{4}$/.test(data.newSequentialNumber)) {
+      Logger.log(`❌ Порядковые номера должны быть 4-значными`);
+      return;
+    }
+    
+    Logger.log(`📤 Отправка данных: камера ${data.chamberNumber}, цикл ${data.oldSequentialNumber} → ${data.newSequentialNumber}`);
+    
+    // Отправка на сервер
+    const response = UrlFetchApp.fetch(URL_WEBHOOK, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` },
+      payload: JSON.stringify(data),
+      muteHttpExceptions: true
+    });
+    
+    const result = JSON.parse(response.getContentText());
+    
+    if (result.success) {
+      Logger.log(`✅ Строка ${row} обработана успешно`);
+    } else if (result.skipped) {
+      Logger.log(`⚠️ Строка ${row} уже была обработана ранее`);
+    } else {
+      Logger.log(`⚠️ Неожиданный ответ: ${response.getContentText()}`);
+    }
+    
+  } catch (error) {
+    Logger.log(`❌ Ошибка обработки строки ${row}: ${error.message}`);
+  }
+}
+
+/**
+ * Конвертирует дату в ISO 8601 формат
+ */
+function formatDate(date) {
+  if (date instanceof Date) {
+    return Utilities.formatDate(date, "GMT", "yyyy-MM-dd'T'HH:mm:ss'Z'");
+  }
+  
+  if (typeof date === 'string' && date !== '') {
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(date.trim())) {
+      return date.trim().replace(' ', 'T') + 'Z';
+    }
+    
+    const parsed = new Date(date);
+    if (!isNaN(parsed.getTime())) {
+      return Utilities.formatDate(parsed, "GMT", "yyyy-MM-dd'T'HH:mm:ss'Z'");
+    }
+  }
+  
+  return new Date().toISOString();
+}
+
+// ============================================================================
+// КОМАНДЫ ДЛЯ НАСТРОЙКИ И УПРАВЛЕНИЯ
+// ============================================================================
+
+/**
+ * 1. Настройка автоматического триггера
+ * Запустите ОДИН РАЗ после установки скрипта
+ */
+function SetupAutoSync() {
+  // Удаляем все старые триггеры
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => ScriptApp.deleteTrigger(trigger));
+  
+  Logger.log('=== НАСТРОЙКА АВТОМАТИЧЕСКОЙ СИНХРОНИЗАЦИИ ===');
+  Logger.log('Старые триггеры удалены');
+  
+  // Создаём триггер по ВРЕМЕНИ (каждую минуту)
+  ScriptApp.newTrigger('autoSyncOnTime')
+    .timeBased()
+    .everyMinutes(1)
+    .create();
+  
+  Logger.log('✅ Создан триггер: autoSyncOnTime (каждую минуту)');
+  Logger.log('');
+  Logger.log('🎉 Автоматическая синхронизация настроена!');
+  Logger.log('Новые строки будут синхронизироваться автоматически каждую минуту');
+}
+
+/**
+ * Автоматическая синхронизация по времени
+ * Проверяет новые строки каждую минуту
+ */
+function autoSyncOnTime() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    Logger.log(`❌ Лист "${SHEET_NAME}" не найден!`);
+    return;
+  }
+  
+  const lastRow = sheet.getLastRow();
+  
+  // Нет данных
+  if (lastRow <= 1) {
+    return;
+  }
+  
+  // Проверяем только последнюю строку (самая свежая)
+  if (isRowComplete(sheet, lastRow)) {
+    // Проверяем, была ли уже обработана
+    const processed = PropertiesService.getScriptProperties().getProperty(`processed_${lastRow}`);
+    
+    if (!processed) {
+      Logger.log(`⏰ Триггер по времени: обнаружена новая строка ${lastRow}`);
+      processRow(sheet, lastRow);
+      
+      // Помечаем как обработанную
+      PropertiesService.getScriptProperties().setProperty(`processed_${lastRow}`, new Date().toISOString());
+    }
+  }
+}
+
+/**
+ * 2. Тестовая синхронизация последней строки
+ * Используйте для проверки работы
+ */
+function TestSync() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    Logger.log(`❌ Лист "${SHEET_NAME}" не найден!`);
+    return;
+  }
+  
+  const lastRow = sheet.getLastRow();
+  
+  Logger.log('=== ТЕСТОВАЯ СИНХРОНИЗАЦИЯ ===');
+  Logger.log(`Последняя строка: ${lastRow}`);
+  
+  if (lastRow > 1) {
+    processRow(sheet, lastRow);
+  } else {
+    Logger.log('❌ Нет данных для синхронизации');
+  }
+}
+
+/**
+ * 3. Синхронизация всех строк со статусом NEW
+ * Обрабатывает все необработанные строки
+ */
+function SyncAllNew() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    Logger.log(`❌ Лист "${SHEET_NAME}" не найден!`);
+    return;
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  let processedCount = 0;
+  let skippedCount = 0;
+  
+  Logger.log('=== МАССОВАЯ СИНХРОНИЗАЦИЯ ===');
+  Logger.log(`Всего строк: ${data.length - 1}`);
+  
+  // Пропускаем заголовок
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const rowNumber = i + 1;
+    
+    // Проверяем что строка заполнена
+    if (!row[1] || !row[2] || !row[4] || !row[6]) {
+      skippedCount++;
+      continue;
+    }
+    
+    Logger.log(`\n--- Обработка строки ${rowNumber} ---`);
+    processRow(sheet, rowNumber);
+    processedCount++;
+    
+    // Задержка между запросами
+    Utilities.sleep(500);
+  }
+  
+  Logger.log('\n=== ИТОГО ===');
+  Logger.log(`✅ Обработано: ${processedCount}`);
+  Logger.log(`⏭️ Пропущено: ${skippedCount}`);
+}
+
+/**
+ * 4. Проверка конфигурации
+ * Показывает текущие настройки и данные
+ */
+function CheckConfig() {
+  Logger.log('=== ПРОВЕРКА КОНФИГУРАЦИИ ===');
+  Logger.log(`URL сервера: ${URL_WEBHOOK}`);
+  Logger.log(`Имя листа: "${SHEET_NAME}"`);
+  
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  
+  if (!sheet) {
+    Logger.log(`❌ Лист "${SHEET_NAME}" не найден!`);
+    Logger.log('');
+    Logger.log('📋 Создайте лист с именем "events" и добавьте заголовки:');
+    Logger.log('A: Timestamp (автоматически)');
+    Logger.log('B: Номер камеры (1-21)');
+    Logger.log('C: Старый порядковый номер');
+    Logger.log('D: Дата окончания старого цикла');
+    Logger.log('E: Новый порядковый номер');
+    Logger.log('F: Дата начала нового цикла');
+    Logger.log('G: Порода (литовское название)');
+    return;
+  }
+  
+  Logger.log(`✅ Лист найден`);
+  Logger.log(`Всего строк: ${sheet.getLastRow()}`);
+  
+  if (sheet.getLastRow() > 1) {
+    Logger.log('\n=== ПОСЛЕДНЯЯ СТРОКА ===');
+    const row = sheet.getLastRow();
+    Logger.log(`Строка: ${row}`);
+    Logger.log(`Камера: ${sheet.getRange(row, COLUMNS.CHAMBER_NUMBER).getValue()}`);
+    Logger.log(`Старый номер: ${sheet.getRange(row, COLUMNS.OLD_SEQUENTIAL_NUMBER).getValue()}`);
+    Logger.log(`Новый номер: ${sheet.getRange(row, COLUMNS.NEW_SEQUENTIAL_NUMBER).getValue()}`);
+    Logger.log(`Порода: ${sheet.getRange(row, COLUMNS.WOOD_TYPE).getValue()}`);
+  }
+  
+  Logger.log('\n✅ Конфигурация корректна');
+}
+
+/**
+ * 5. Посмотреть логи синхронизации
+ * Показывает последние 5 операций из Supabase
+ */
+function ViewLogs() {
+  Logger.log('📋 Получение логов синхронизации из Supabase...');
+  
+  const logsUrl = URL_WEBHOOK.replace('/sheets/process-row', '/sheets/sync-logs?limit=5');
+  
+  try {
+    const response = UrlFetchApp.fetch(logsUrl, {
+      method: 'get',
+      headers: { 'Authorization': `Bearer ${AUTH_TOKEN}` },
+      muteHttpExceptions: true
+    });
+    
+    const result = JSON.parse(response.getContentText());
+    
+    Logger.log(`\n=== ЛОГИ СИНХРОНИЗАЦИИ (${result.count} записей) ===\n`);
+    
+    if (result.count === 0) {
+      Logger.log('📭 Логов пока нет');
+      return;
+    }
+    
+    result.logs.forEach((log, i) => {
+      Logger.log(`\n--- ЛОГ ${i + 1} (${log.timestamp}) ---`);
+      Logger.log(`Всего операций: ${log.logs.length}`);
+      log.logs.forEach(op => {
+        Logger.log(`\n  ${op.action}:`);
+        Logger.log(`    Успех: ${op.success ? '✅' : '❌'}`);
+        Logger.log(`    Сообщение: ${op.message}`);
+        if (op.details) {
+          Logger.log(`    Детали: ${JSON.stringify(op.details)}`);
+        }
+      });
+    });
+    
+  } catch (error) {
+    Logger.log(`❌ Ошибка: ${error.message}`);
+  }
+}
+
+/**
+ * 6. Очистить метки обработанных строк
+ * Используйте для повторного тестирования
+ */
+function CleanupProcessedMarkers() {
+  PropertiesService.getScriptProperties().deleteAllProperties();
+  Logger.log('=== ОЧИСТКА МАРКЕРОВ ===');
+  Logger.log('✅ Все маркеры обработанных строк удалены');
+  Logger.log('Строки можно обработать заново');
+}
+
+/**
+ * 7. Показать все триггеры
+ * Проверяет какие триггеры установлены
+ */
+function ShowTriggers() {
+  Logger.log('=== УСТАНОВЛЕННЫЕ ТРИГГЕРЫ ===\n');
+  
+  const triggers = ScriptApp.getProjectTriggers();
+  
+  if (triggers.length === 0) {
+    Logger.log('❌ Триггеров нет! Запустите SetupAutoSync()');
+    return;
+  }
+  
+  triggers.forEach((trigger, i) => {
+    Logger.log(`Триггер ${i + 1}:`);
+    Logger.log(`  Функция: ${trigger.getHandlerFunction()}`);
+    Logger.log(`  Тип: ${trigger.getEventType()}`);
+    Logger.log('');
+  });
+  
+  Logger.log(`Всего триггеров: ${triggers.length}`);
+  Logger.log('');
+  
+  // Проверка правильности
+  const hasOnEdit = triggers.some(t => t.getHandlerFunction() === 'onEdit');
+  const hasOthers = triggers.some(t => t.getHandlerFunction() !== 'onEdit');
+  
+  if (hasOnEdit && !hasOthers) {
+    Logger.log('✅ Всё правильно! Есть только нужный триггер onEdit');
+  } else if (!hasOnEdit) {
+    Logger.log('⚠️ Триггер onEdit не найден! Запустите SetupAutoSync()');
+  } else if (hasOthers) {
+    Logger.log('⚠️ Есть лишние триггеры! Запустите CleanupTriggers()');
+  }
+}
+
+/**
+ * 8. Удалить ВСЕ триггеры
+ * Очищает все триггеры (для чистой установки)
+ */
+function CleanupTriggers() {
+  Logger.log('🗑️ Удаление всех триггеров...\n');
+  
+  const triggers = ScriptApp.getProjectTriggers();
+  
+  if (triggers.length === 0) {
+    Logger.log('✅ Триггеров нет');
+    return;
+  }
+  
+  triggers.forEach((trigger, i) => {
+    Logger.log(`Удаление триггера ${i + 1}: ${trigger.getHandlerFunction()}`);
+    ScriptApp.deleteTrigger(trigger);
+  });
+  
+  Logger.log('');
+  Logger.log(`✅ Удалено триггеров: ${triggers.length}`);
+  Logger.log('');
+  Logger.log('Теперь запустите SetupAutoSync() для создания нового триггера');
+}
+
+// ============================================================================
+// ИНСТРУКЦИЯ ПО УСТАНОВКЕ
+// ============================================================================
+
+/**
+ * 📖 БЫСТРЫЙ СТАРТ:
+ * 
+ * 1. Создайте лист "events" в вашей Google Таблице
+ * 2. Добавьте заголовки в первую строку:
+ *    A: Timestamp (оставьте пустым - заполнится автоматически)
+ *    B: Chamber (номер камеры 1-21)
+ *    C: OldCycle (старый порядковый номер, например: 9952)
+ *    D: FinishDate (дата окончания старого цикла)
+ *    E: NewCycle (новый порядковый номер, например: 9953)
+ *    F: StartDate (дата начала нового цикла)
+ *    G: WoodType (порода: Beržas285, Ąžuolas235, и т.д.)
+ * 
+ * 3. Откройте: Расширения → Apps Script
+ * 4. Вставьте этот код
+ * 5. Сохраните (Ctrl+S)
+ * 6. Запустите функцию: SetupAutoSync()
+ * 7. Готово! Теперь при заполнении строки всё работает автоматически
+ * 
+ * 
+ * 🔧 ПОЛЕЗНЫЕ КОМАНДЫ:
+ * 
+ * SetupAutoSync() - включить автоматическую синхронизацию (запустить 1 раз)
+ * TestSync() - тестовая синхронизация последней строки
+ * SyncAllNew() - массовая синхронизация всех заполненных строк
+ * CheckConfig() - проверка настроек и данных
+ * ViewLogs() - посмотреть последние логи из Supabase
+ * ClearProcessed() - очистить метки для поторного тестирования
+ * ShowTriggers() - показать установленные триггеры
+ * CleanupTriggers() - удалить все триггеры
+ * 
+ * 
+ * 📋 КАК ИСПОЛЬЗОВАТЬ:
+ * 
+ * 1. Соберите данные из производственных таблиц вручную
+ * 2. Заполните строку в листе "events"
+ * 3. Как только все поля заполнены - автоматически отправляется в Supabase
+ * 4. Supabase автоматически:
+ *    - Закрывает старый цикл
+ *    - Создаёт новый цикл
+ *    - Загружает погодные данные
+ * 
+ * 
+ * 🌳 ПОДДЕРЖИВАЕМЫЕ ПОРОДЫ:
+ * 
+ * Beržas235, Beržas285 → Birch (Берёза)
+ * Alksnis235 → Alder (Ольха)
+ * Ąžuolas235 → Oak (Дуб)
+ * Uosis235 → Ash (Ясень)
+ * Klevas235 → Maple (Клён)
+ * Skroblas235 → Scroblas (Скроблас)
+ * 
+ * 
+ * ⚠️ ВАЖНО:
+ * 
+ * - Порядковые номера должны быть 4-значными (например: 9952)
+ * - Номер камеры должен быть от 1 до 21
+ * - Все поля должны быть заполнены для автоматической синхронизации
+ * 
+ * 
+ * 🆘 ТЕХПОДДЕРЖКА:
+ * 
+ * Если что-то не работает:
+ * 1. Запустите CheckConfig() - проверит настройки
+ * 2. Запустите ViewLogs() - покажет что произошло
+ * 3. Проверьте что лист называется "events"
+ * 4. Проверьте что все поля заполнены корректно
+ */

@@ -10,6 +10,8 @@ export const LITHUANIAN_TO_ENGLISH: Record<string, string> = {
   
   // Ольха
   'Alksnis235': 'Alder235',
+  'JAlksnis235': 'Alder235',  // J = желтая ольха
+  'BAlksnis235': 'Alder235',  // B = белая ольха
   
   // Дуб
   'Ąžuolas235': 'Oak235',

@@ -43,7 +43,7 @@ export default function LoginScreen() {
                 {lang === 'ru' ? 'Оператор' : 'Operatorius'}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                {lang === 'ru' ? 'Цех сушки • Фото рецептов' : 'Džiovinimo cechas • Receptų nuotraukos'}
+                {lang === 'ru' ? 'Фото рецептов' : 'Receptų nuotraukos'}
               </p>
             </div>
           </button>

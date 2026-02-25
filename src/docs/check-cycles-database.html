@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Проверка циклов в базе</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    .search-box {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    input {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      flex: 1;
+      min-width: 200px;
+    }
+    button {
+      padding: 12px 24px;
+      background: #0070f3;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #0051cc;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .stat-card.green {
+      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    }
+    .stat-card.orange {
+      background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
+    }
+    .stat-number {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .stat-label {
+      font-size: 13px;
+      opacity: 0.9;
+    }
+    .cycles-list {
+      max-height: 600px;
+      overflow-y: auto;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+    }
+    .cycle-item {
+      padding: 15px;
+      border-bottom: 1px solid #f0f0f0;
+      transition: background 0.2s;
+    }
+    .cycle-item:hover {
+      background: #f9f9f9;
+    }
+    .cycle-item:last-child {
+      border-bottom: none;
+    }
+    .cycle-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .cycle-title {
+      font-weight: 600;
+      font-size: 16px;
+      color: #333;
+    }
+    .cycle-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-progress {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    .badge-completed {
+      background: #e8f5e9;
+      color: #388e3c;
+    }
+    .cycle-details {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      font-size: 13px;
+      color: #666;
+    }
+    .detail-item {
+      display: flex;
+      gap: 5px;
+    }
+    .detail-label {
+      font-weight: 600;
+      color: #333;
+    }
+    .error {
+      background: #ffebee;
+      color: #c62828;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+    .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+    }
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 15px;
+    }
+    code {
+      background: #f5f5f5;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Проверка циклов в базе данных</h1>
+    <p class="subtitle">Отладочный инструмент для просмотра KV таблицы</p>
+
+    <div class="search-box">
+      <input 
+        type="text" 
+        id="sequentialSearch" 
+        placeholder="Поиск по порядковому номеру (например: 9954)"
+      >
+      <input 
+        type="number" 
+        id="chamberSearch" 
+        placeholder="Номер камеры (1-21)"
+        min="1"
+        max="21"
+      >
+      <button onclick="loadCycles()">🔄 Загрузить циклы</button>
+      <button onclick="clearFilters()">✕ Сбросить фильтры</button>
+    </div>
+
+    <div id="stats" class="stats" style="display: none;">
+      <div class="stat-card">
+        <div class="stat-number" id="totalCount">0</div>
+        <div class="stat-label">Всего циклов</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-number" id="inProgressCount">0</div>
+        <div class="stat-label">В процессе</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="stat-number" id="completedCount">0</div>
+        <div class="stat-label">Завершено</div>
+      </div>
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="loading" class="loading" style="display: none;">
+      <div style="font-size: 32px; margin-bottom: 10px;">⏳</div>
+      <div>Загрузка циклов из базы...</div>
+    </div>
+
+    <div id="cyclesList" class="cycles-list"></div>
+  </div>
+
+  <script>
+    const API_URL = 'https://zzteuolgibfbulqdavof.supabase.co/functions/v1/make-server-c5bcdb1f';
+    const AUTH_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6dGV1b2xnaWJmYnVscWRhdm9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk4NTA0NjgsImV4cCI6MjA4NTQyNjQ2OH0.mXYRfFM9csWjPXirW0nY10vz5hhDTj4EAeugrwRp_5A';
+
+    let allCycles = [];
+
+    async function loadCycles() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      const list = document.getElementById('cyclesList');
+      const stats = document.getElementById('stats');
+
+      loading.style.display = 'block';
+      error.style.display = 'none';
+      list.innerHTML = '';
+      stats.style.display = 'none';
+
+      try {
+        const response = await fetch(`${API_URL}/cycles`, {
+          headers: {
+            'Authorization': `Bearer ${AUTH_TOKEN}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        allCycles = await response.json();
+        loading.style.display = 'none';
+
+        if (!Array.isArray(allCycles) || allCycles.length === 0) {
+          list.innerHTML = `
+            <div class="empty">
+              <div class="empty-icon">📭</div>
+              <div style="font-size: 18px; margin-bottom: 10px; font-weight: 600;">Циклы не найдены</div>
+              <div style="font-size: 14px;">В базе данных KV таблицы нет ни одного цикла</div>
+              <div style="margin-top: 20px; font-size: 13px; color: #999;">
+                Проверьте что вы создали хотя бы один цикл в приложении
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        displayCycles(allCycles);
+        updateStats(allCycles);
+        stats.style.display = 'grid';
+
+      } catch (err) {
+        loading.style.display = 'none';
+        error.style.display = 'block';
+        error.innerHTML = `
+          <strong>❌ Ошибка загрузки:</strong><br>
+          ${err.message}<br><br>
+          <small>Проверьте что URL и токен правильные</small>
+        `;
+      }
+    }
+
+    function displayCycles(cycles) {
+      const list = document.getElementById('cyclesList');
+      const seqFilter = document.getElementById('sequentialSearch').value.trim();
+      const chamberFilter = document.getElementById('chamberSearch').value;
+
+      let filtered = cycles;
+
+      if (seqFilter) {
+        filtered = filtered.filter(c => 
+          c.sequentialNumber && c.sequentialNumber.toString().includes(seqFilter)
+        );
+      }
+
+      if (chamberFilter) {
+        filtered = filtered.filter(c => 
+          c.chamberNumber === parseInt(chamberFilter)
+        );
+      }
+
+      if (filtered.length === 0) {
+        list.innerHTML = `
+          <div class="empty">
+            <div class="empty-icon">🔍</div>
+            <div style="font-size: 18px; margin-bottom: 10px; font-weight: 600;">Ничего не найдено</div>
+            <div style="font-size: 14px;">Попробуйте изменить фильтры</div>
+          </div>
+        `;
+        return;
+      }
+
+      list.innerHTML = filtered.map(cycle => {
+        // Статус определяется по наличию endDate, а не по полю status
+        const isCompleted = cycle.endDate && cycle.endDate !== '';
+        const status = isCompleted ? 'Завершено' : 'В процессе';
+        const badgeClass = isCompleted ? 'badge-completed' : 'badge-progress';
+        const startDate = cycle.startDate ? new Date(cycle.startDate).toLocaleString('ru-RU') : 'Не указана';
+        const endDate = cycle.endDate ? new Date(cycle.endDate).toLocaleString('ru-RU') : '-';
+        
+        return `
+          <div class="cycle-item">
+            <div class="cycle-header">
+              <div class="cycle-title">
+                Камера ${cycle.chamberNumber || '?'} • №${cycle.sequentialNumber || 'N/A'}
+              </div>
+              <span class="cycle-badge ${badgeClass}">${status}</span>
+            </div>
+            <div class="cycle-details">
+              <div class="detail-item">
+                <span class="detail-label">UUID:</span>
+                <code>${cycle.id || 'N/A'}</code>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Порода:</span>
+                <span>${cycle.woodType || 'Не указана'}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Начало:</span>
+                <span>${startDate}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Окончание:</span>
+                <span>${endDate}</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Влажность:</span>
+                <span>${cycle.finalMoisture || '-'} %</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-label">Рейтинг:</span>
+                <span>${cycle.qualityRating ? cycle.qualityRating + ' ⭐' : '-'}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function updateStats(cycles) {
+      const total = cycles.length;
+      // Цикл завершён если есть endDate
+      const completed = cycles.filter(c => c.endDate && c.endDate !== '').length;
+      const inProgress = total - completed;
+
+      document.getElementById('totalCount').textContent = total;
+      document.getElementById('inProgressCount').textContent = inProgress;
+      document.getElementById('completedCount').textContent = completed;
+    }
+
+    function clearFilters() {
+      document.getElementById('sequentialSearch').value = '';
+      document.getElementById('chamberSearch').value = '';
+      if (allCycles.length > 0) {
+        displayCycles(allCycles);
+      }
+    }
+
+    // Поиск при вводе
+    document.getElementById('sequentialSearch').addEventListener('input', () => {
+      if (allCycles.length > 0) displayCycles(allCycles);
+    });
+
+    document.getElementById('chamberSearch').addEventListener('input', () => {
+      if (allCycles.length > 0) displayCycles(allCycles);
+    });
+
+    // Автозагрузка при открытии
+    window.addEventListener('load', loadCycles);
+  </script>
+</body>
+</html>

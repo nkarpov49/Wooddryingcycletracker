@@ -1,0 +1,215 @@
+// ⚠️ ТЕСТОВЫЙ СКРИПТ (БЕЗ ОТПРАВКИ НА СЕРВЕР)
+// Используйте ТОЛЬКО для проверки чтения процентов из ячеек
+// После тестирования используйте основной скрипт из google-apps-script-progress.txt
+
+// ============================================
+// НАСТРОЙКИ
+// ============================================
+
+// Ячейки с процентами для каждой камеры
+const CHAMBER_CELLS = [
+  'C9',   // Камера 1
+  'E9',   // Камера 2
+  'G9',   // Камера 3
+  'I9',   // Камера 4
+  'K9',   // Камера 5
+  'M9',   // Камера 6
+  'O9',   // Камера 7
+  'Q9',   // Камера 8
+  'S9',   // Камера 9
+  'U9',   // Камера 10
+  'W9',   // Камера 11
+  'Y9',   // Камера 12
+  'AA9',  // Камера 13
+  'AC9',  // Камера 14
+  'AE9',  // Камера 15
+  'AG9',  // Камера 16
+  'AI9',  // Камера 17
+  'AK9',  // Камера 18
+  'AM9',  // Камера 19
+  'AO9',  // Камера 20
+  'AQ9'   // Камера 21
+];
+
+// ============================================
+// ОСНОВНАЯ ФУНКЦИЯ (ТОЛЬКО ТЕСТИРОВАНИЕ)
+// ============================================
+
+function testProgressReadingOnly() {
+  console.log('🧪 ТЕСТОВЫЙ РЕЖИМ: Чтение процентов БЕЗ отправки на сервер');
+  
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    // Формируем объект: { "1": 45.5, "2": 78.3, ... "21": 115.5 }
+    const progressData = {};
+    const details = []; // Для детального лога
+    
+    for (let i = 0; i < CHAMBER_CELLS.length; i++) {
+      const chamberNumber = i + 1;
+      const cellAddress = CHAMBER_CELLS[i];
+      
+      // Получаем ЗНАЧЕНИЕ ячейки (результат формулы, а не саму формулу)
+      let percentValue = sheet.getRange(cellAddress).getValue();
+      
+      // Сохраняем исходное значение для лога
+      const originalValue = percentValue;
+      
+      // ВАЖНО: Google Sheets хранит проценты как дробные числа (0.59 = 59%)
+      // Формула =(now()-$C$6)/((vlookup($C$4;Standartai!$B$5:$E;4;false))/24)
+      // возвращает дробное число, которое нужно умножить на 100
+      
+      if (typeof percentValue === 'number') {
+        // Это дробное число от формулы - умножаем на 100
+        percentValue = percentValue * 100;
+      } else if (typeof percentValue === 'string') {
+        // Если это строку с символом %, убираем его
+        percentValue = percentValue.replace('%', '').replace(',', '.').trim();
+        percentValue = parseFloat(percentValue);
+      } else {
+        // Пустая ячейка или ошибка
+        percentValue = 0;
+      }
+      
+      // Проверяем что это валидное число
+      if (!isNaN(percentValue) && isFinite(percentValue)) {
+        // Округляем до 1 знака после запятой
+        progressData[chamberNumber] = Math.round(percentValue * 10) / 10;
+      } else {
+        // Если значение невалидное, устанавливаем 0
+        progressData[chamberNumber] = 0;
+      }
+      
+      // Детальный лог для каждой камеры
+      details.push({
+        chamber: chamberNumber,
+        cell: cellAddress,
+        original: originalValue,
+        converted: progressData[chamberNumber],
+        type: typeof originalValue
+      });
+    }
+    
+    // Выводим результаты
+    console.log('✅ Чтение завершено успешно!');
+    console.log('');
+    console.log('📊 РЕЗУЛЬТАТЫ:');
+    console.log(JSON.stringify(progressData, null, 2));
+    console.log('');
+    console.log('📋 ДЕТАЛЬНАЯ ИНФОРМАЦИЯ:');
+    console.log('');
+    
+    // Выводим детали по каждой камере
+    for (const detail of details) {
+      const status = detail.converted > 0 ? '✅' : '⚠️';
+      console.log(`${status} Камера ${detail.chamber} (${detail.cell}):`);
+      console.log(`   Исходное значение: ${detail.original} (тип: ${detail.type})`);
+      console.log(`   Конвертировано в:  ${detail.converted}%`);
+      console.log('');
+    }
+    
+    // Статистика
+    const validChambers = Object.values(progressData).filter(v => v > 0).length;
+    console.log('📈 СТАТИСТИКА:');
+    console.log(`   Всего камер: ${CHAMBER_CELLS.length}`);
+    console.log(`   С данными: ${validChambers}`);
+    console.log(`   Без данных: ${CHAMBER_CELLS.length - validChambers}`);
+    console.log('');
+    console.log('🔍 ПРОВЕРЬТЕ:');
+    console.log('   1. Все ли проценты выглядят правильно?');
+    console.log('   2. Есть ли проценты = 2, 3, 1 вместо 20, 30, 10?');
+    console.log('   3. Если да - формула читается неправильно!');
+    console.log('   4. Если проценты правильные (59.2, 78.5, 115.3) - всё OK!');
+    console.log('');
+    console.log('⚠️ ВАЖНО: Это ТЕСТОВЫЙ режим, данные НЕ отправлены на сервер!');
+    console.log('⚠️ После проверки используйте основной скрипт из google-apps-script-progress.txt');
+    console.log('⚠️ НЕ ЗАБУДЬТЕ добавить SUPABASE_ANON_KEY в основной скрипт!');
+    
+  } catch (error) {
+    console.error('❌ Ошибка тестирования:', error);
+    console.error('   Сообщение:', error.message);
+    console.error('   Стек:', error.stack);
+  }
+}
+
+// ============================================
+// ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ
+// ============================================
+
+/*
+
+📋 КАК ИСПОЛЬЗОВАТЬ ЭТОТ СКРИПТ:
+
+1. Скопируйте ВЕСЬ этот код
+2. Откройте Google Apps Script (Расширения → Apps Script)
+3. Вставьте код в редактор
+4. Нажмите RUN (▶️) → Выберите функцию "testProgressReadingOnly"
+5. Дайте разрешения Google (если нужно)
+6. Проверьте логи (View → Logs или Ctrl+Enter)
+
+ОЖИДАЕМЫЙ РЕЗУЛЬТАТ В ЛОГАХ:
+
+✅ Чтение завершено успешно!
+
+📊 РЕЗУЛЬТАТЫ:
+{
+  "1": 59.2,
+  "2": 23.4,
+  "3": 115.5,
+  "4": 78.9,
+  ...
+  "21": 45.3
+}
+
+📋 ДЕТАЛЬНАЯ ИНФОРМАЦИЯ:
+
+✅ Камера 1 (C9):
+   Исходное значение: 0.592 (тип: number)
+   Конвертировано в:  59.2%
+
+✅ Камера 2 (E9):
+   Исходное значение: 0.234 (тип: number)
+   Конвертировано в:  23.4%
+
+...
+
+📈 СТАТИСТИКА:
+   Всего камер: 21
+   С данными: 18
+   Без данных: 3
+
+---
+
+⚠️ ЕСЛИ ВИДИТЕ ПРОЦЕНТЫ 2, 3, 1 ВМЕСТО 20, 30, 10:
+Проблема в формуле или считывании. Проверьте:
+1. Ячейки C9, E9, G9... содержат формулы?
+2. Формула возвращает число или текст?
+3. Попробуйте вручную открыть ячейку C9 и посмотрите что там
+
+---
+
+✅ ЕСЛИ ПРОЦЕНТЫ ПРАВИЛЬНЫЕ (59.2, 78.5, 115.3):
+Всё отлично! Используйте основной скрипт:
+- Откройте google-apps-script-progress.txt
+- Замените SUPABASE_URL на ваш
+- Замените SUPABASE_ANON_KEY на ваш (ОБЯЗАТЕЛЬНО!)
+- Создайте триггер (каждые 15 минут)
+
+---
+
+🔑 ГДЕ НАЙТИ SUPABASE_ANON_KEY?
+1. Откройте Supabase Dashboard
+2. Project Settings → API
+3. Скопируйте "anon" / "public" key
+4. Вставьте в строку: const SUPABASE_ANON_KEY = 'ваш-ключ-здесь';
+
+---
+
+🚀 ПОСЛЕ УСПЕШНОГО ТЕСТА:
+1. Удалите этот тестовый скрипт
+2. Используйте основной из google-apps-script-progress.txt
+3. НЕ ЗАБУДЬТЕ добавить SUPABASE_ANON_KEY!
+4. Создайте триггер (каждые 15 минут)
+5. Проверьте что НЕТ дублирующихся триггеров!
+
+*/

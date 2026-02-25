@@ -236,21 +236,21 @@ export default function CalendarView({ cycles }: CalendarViewProps) {
       </div>
 
       {/* Weekday Headers */}
-      <div className="grid grid-cols-7 border-b border-gray-100 bg-white">
+      <div className="grid grid-cols-7 border-b border-gray-300 bg-white">
         {weekDaysHeader.map((day) => (
-          <div key={day} className="py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-widest">
+          <div key={day} className="py-3 text-center text-xs font-semibold text-gray-400 uppercase tracking-widest border-r border-gray-200 last:border-r-0">
             {t(day)}
           </div>
         ))}
       </div>
 
       {/* Calendar Grid - Rendering Week by Week */}
-      <div className="flex flex-col divide-y divide-gray-100">
+      <div className="flex flex-col divide-y divide-gray-300">
         {weeksWithEvents.map((week, weekIdx) => (
           <div key={weekIdx} className="grid grid-cols-7 relative bg-white">
             
             {/* Background Grid Lines (Vertical) */}
-             <div className="absolute inset-0 grid grid-cols-7 divide-x divide-gray-50 pointer-events-none">
+             <div className="absolute inset-0 grid grid-cols-7 divide-x divide-gray-200 pointer-events-none">
                  {[...Array(7)].map((_, i) => <div key={i} className="h-full" />)}
              </div>
 
@@ -289,20 +289,18 @@ export default function CalendarView({ cycles }: CalendarViewProps) {
                     <div className="flex justify-between items-start mb-2">
                         {/* Date Number */}
                         <div className={`
-                            w-8 h-8 flex items-center justify-center rounded-full text-lg font-medium transition-colors
-                            ${isToday ? 'bg-red-500 text-white shadow-md font-bold' : 'text-gray-900'}
+                            w-8 h-8 flex items-center justify-center rounded-full text-lg font-bold transition-colors
+                            ${isToday ? 'bg-red-500 text-white shadow-md' : 'bg-gray-100 text-gray-900'}
                         `}>
                             {format(day, 'd')}
                         </div>
 
-                        {/* Weather */}
+                        {/* Weather - Визуально отделен */}
                         {weather && (
-                            <div className="flex flex-col items-end">
-                                <div className="text-xl font-semibold text-gray-700 leading-none mb-0.5">
+                            <div className="flex items-center gap-1 bg-white/80 px-2 py-1 rounded-lg border border-gray-100 shadow-sm">
+                                {getWeatherIcon(weather.code)}
+                                <div className="text-sm font-bold text-blue-600">
                                     {Math.round(weather.temp)}°
-                                </div>
-                                <div>
-                                    {getWeatherIcon(weather.code)}
                                 </div>
                             </div>
                         )}
