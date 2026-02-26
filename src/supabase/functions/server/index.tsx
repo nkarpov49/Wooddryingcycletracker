@@ -102,7 +102,10 @@ routes.get('/health', (c) => {
 
 routes.get('/cycles', async (c) => {
   try {
+    console.log('[Cycles] Запрос на получение циклов');
+    
     const cycles = await kv.getByPrefix("cycle_");
+    console.log(`[Cycles] Загружено ${cycles.length} циклов`);
     
     // Поддержка фильтрации по sequentialNumber для Google Sheets синхронизации
     const sequentialNumber = c.req.query('sequentialNumber');
@@ -110,18 +113,32 @@ routes.get('/cycles', async (c) => {
     
     if (sequentialNumber) {
       filteredCycles = cycles.filter((cycle: any) => 
-        cycle.sequentialNumber === sequentialNumber
+        cycle && cycle.sequentialNumber === sequentialNumber
       );
+      console.log(`[Cycles] Отфильтровано по sequentialNumber ${sequentialNumber}: ${filteredCycles.length} циклов`);
     }
     
     const signedCycles = await Promise.all(filteredCycles.map(async (cycle: any) => {
-      return await signCycleUrls(cycle);
+      if (!cycle) return null;
+      try {
+        return await signCycleUrls(cycle);
+      } catch (signError: any) {
+        console.error(`[Cycles] Ошибка подписания URL для цикла ${cycle.id}:`, signError);
+        return cycle; // Возвращаем без подписанных URL
+      }
     }));
-    signedCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return c.json(signedCycles);
+    
+    const validCycles = signedCycles.filter(c => c !== null);
+    validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    console.log(`[Cycles] Возвращаем ${validCycles.length} циклов`);
+    return c.json(validCycles);
   } catch (error: any) {
-    console.error("Error fetching cycles:", error);
-    return c.json({ error: error.message }, 500);
+    console.error("[Cycles] Критическая ошибка получения циклов:", error);
+    console.error("[Cycles] Stack trace:", error.stack);
+    
+    // Возвращаем пустой массив вместо ошибки 500
+    return c.json([]);
   }
 });
 
@@ -343,14 +360,19 @@ routes.post('/sheets/update-current-work', async (c) => {
 // НОВЫЙ: Получить текущие работы (для фронтенда)
 routes.get('/sheets/current-work', async (c) => {
   try {
+    console.log('[Sheets] Запрос текущих работ');
+    
     const data = await kv.get('current_work');
     
     if (!data) {
+      console.log('[Sheets] Данные о текущих работах не найдены, возвращаем пустой массив');
       return c.json({ 
         currentWork: [],
         message: 'Данные о текущих работах не найдены' 
       });
     }
+    
+    console.log('[Sheets] Найдены данные о текущих работах:', data);
     
     // Находим циклы по порядковым номерам
     const sequentialNumbers = [
@@ -359,59 +381,90 @@ routes.get('/sheets/current-work', async (c) => {
       data.line3?.sequentialNumber,
     ].filter(Boolean);
     
-    // Получаем все циклы
-    const allCycles = await kv.getByPrefix('cycle_');
+    console.log('[Sheets] Порядковые номера циклов:', sequentialNumbers);
+    
+    // Получаем все циклы с обработкой ошибок
+    let allCycles = [];
+    try {
+      allCycles = await kv.getByPrefix('cycle_');
+      console.log(`[Sheets] Загружено ${allCycles.length} циклов из базы`);
+    } catch (cycleError: any) {
+      console.error('[Sheets] Ошибка загрузки циклов:', cycleError);
+      // Продолжаем с пустым массивом циклов
+      allCycles = [];
+    }
     
     // Создаём Map для быстрого поиска по sequentialNumber
     const cyclesMap = new Map();
     for (const cycle of allCycles) {
-      if (cycle.sequentialNumber) {
+      if (cycle && cycle.sequentialNumber) {
         cyclesMap.set(cycle.sequentialNumber, cycle);
       }
     }
+    
+    console.log(`[Sheets] Создана карта циклов: ${cyclesMap.size} записей`);
     
     // Формируем результат
     const currentWork = [];
     
     if (data.line1?.sequentialNumber) {
+      const cycle = cyclesMap.get(data.line1.sequentialNumber) || null;
       currentWork.push({
         lineId: '1',
         sequentialNumber: data.line1.sequentialNumber,
-        rawText: data.line1.rawText,
-        cycle: cyclesMap.get(data.line1.sequentialNumber) || null
+        rawText: data.line1.rawText || '',
+        cycle
       });
+      console.log(`[Sheets] Линия 1: ${data.line1.sequentialNumber}, цикл найден: ${!!cycle}`);
     }
     
     if (data.line2?.sequentialNumber) {
+      const cycle = cyclesMap.get(data.line2.sequentialNumber) || null;
       currentWork.push({
         lineId: '2',
         sequentialNumber: data.line2.sequentialNumber,
-        rawText: data.line2.rawText,
-        cycle: cyclesMap.get(data.line2.sequentialNumber) || null
+        rawText: data.line2.rawText || '',
+        cycle
       });
+      console.log(`[Sheets] Линия 2: ${data.line2.sequentialNumber}, цикл найден: ${!!cycle}`);
     }
     
     if (data.line3?.sequentialNumber) {
+      const cycle = cyclesMap.get(data.line3.sequentialNumber) || null;
       currentWork.push({
         lineId: '3',
         sequentialNumber: data.line3.sequentialNumber,
-        rawText: data.line3.rawText,
-        cycle: cyclesMap.get(data.line3.sequentialNumber) || null
+        rawText: data.line3.rawText || '',
+        cycle
       });
+      console.log(`[Sheets] Линия 3: ${data.line3.sequentialNumber}, цикл найден: ${!!cycle}`);
     }
     
     // Подписываем URL для фото
     for (const work of currentWork) {
       if (work.cycle) {
-        work.cycle = await signCycleUrls(work.cycle);
+        try {
+          work.cycle = await signCycleUrls(work.cycle);
+        } catch (signError: any) {
+          console.error('[Sheets] Ошибка подписания URL для цикла:', signError);
+          // Продолжаем без подписанных URL
+        }
       }
     }
     
+    console.log(`[Sheets] Возвращаем ${currentWork.length} текущих работ`);
     return c.json({ currentWork, timestamp: data.timestamp });
     
   } catch (error: any) {
-    console.error('[Sheets] Ошибка получения текущих работ:', error);
-    return c.json({ error: error.message }, 500);
+    console.error('[Sheets] Критическая ошибка получения текущих работ:', error);
+    console.error('[Sheets] Stack trace:', error.stack);
+    
+    // Возвращаем пустой массив вместо ошибки 500
+    return c.json({ 
+      currentWork: [], 
+      error: error.message,
+      message: 'Ошибка загрузки данных, попробуйте позже'
+    });
   }
 });
 
@@ -574,7 +627,7 @@ routes.get('/sheets/processed-rows', async (c) => {
   }
 });
 
-// Очистить все обработанные строки (для массового тестирован��я)
+// Очистить все обработанные строки (для массового тестированя)
 routes.post('/sheets/clear-processed', async (c) => {
   try {
     console.log('[Sheets] Очистка всех обработанных строк');

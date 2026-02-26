@@ -2,6 +2,16 @@ import { projectId, publicAnonKey } from '../utils/supabase/info';
 
 const BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f`;
 
+console.log(`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚀 DryTrack API Configuration
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 Project ID: ${projectId}
+🔗 Base URL: ${BASE_URL}
+🔑 Auth Key: ${publicAnonKey.substring(0, 30)}...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`);
+
 export interface CyclePhoto {
   path: string;
   url?: string;
@@ -52,18 +62,47 @@ export interface CurrentWorkCycle {
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const headers = {
     'Authorization': `Bearer ${publicAnonKey}`,
+    'Content-Type': 'application/json',
     ...options.headers,
   };
   
-  const response = await fetch(url, { ...options, headers });
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || response.statusText);
+  console.log(`[API] Запрос к: ${url}`);
+  
+  try {
+    const response = await fetch(url, { ...options, headers });
+    
+    console.log(`[API] Ответ от ${url}:`, response.status, response.statusText);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[API] Ошибка ${response.status}:`, errorText);
+      throw new Error(errorText || response.statusText);
+    }
+    
+    const data = await response.json();
+    console.log(`[API] Данные получены от ${url}:`, data);
+    return data;
+  } catch (error) {
+    console.error(`[API] Ошибка запроса к ${url}:`, error);
+    throw error;
   }
-  return response.json();
 }
 
 export const api = {
+  // Health check endpoint для проверки связи с сервером
+  healthCheck: async () => {
+    try {
+      console.log(`[API] Health check: ${BASE_URL}/health`);
+      const response = await fetch(`${BASE_URL}/health`);
+      const data = await response.json();
+      console.log('[API] Health check result:', data);
+      return data;
+    } catch (error) {
+      console.error('[API] Health check failed:', error);
+      throw error;
+    }
+  },
+  
   getWoodDurations: async () => {
     return fetchWithAuth(`${BASE_URL}/settings/durations`);
   },
@@ -71,7 +110,6 @@ export const api = {
   updateWoodDurations: async (durations: Record<string, number>) => {
     return fetchWithAuth(`${BASE_URL}/settings/durations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(durations),
     });
   },
@@ -83,7 +121,6 @@ export const api = {
   createCycle: async (cycle: DryingCycle) => {
     return fetchWithAuth(`${BASE_URL}/cycles`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cycle),
     });
   },
@@ -91,7 +128,6 @@ export const api = {
   updateCycle: async (id: string, cycle: Partial<DryingCycle>) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cycle),
     });
   },

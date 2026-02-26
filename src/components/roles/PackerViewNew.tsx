@@ -132,6 +132,7 @@ export default function PackerViewNew() {
     if (type.includes('oak')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     if (type.includes('alder')) return 'bg-gray-100 text-gray-800 border-gray-200';
     if (type.includes('maple') || type.includes('ash')) return 'bg-green-100 text-green-800 border-green-200';
+    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
@@ -172,9 +173,9 @@ export default function PackerViewNew() {
   };
 
   const getLineLabel = (lineId: '1' | '2' | '3') => {
-    if (lineId === '1') return t('line1And2').split(' и ')[0] + ' ' + t('line1And2').split(' ').pop(); // "1 линия" или "1 linija"
-    if (lineId === '2') return '2 ' + t('line1And2').split(' ').pop(); // "2 линия" или "2 linija"
-    return t('line3'); // "3 линия" или "3 linija"
+    if (lineId === '1') return t('line1');
+    if (lineId === '2') return t('line2');
+    return t('line3');
   };
 
   return (

@@ -12,10 +12,28 @@ CREATE TABLE kv_store_c5bcdb1f (
 // This file provides a simple key-value interface for storing Figma Make data. It should be adequate for most small-scale use cases.
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
-const client = () => createClient(
-  Deno.env.get("SUPABASE_URL"),
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-);
+// Create a singleton Supabase client to avoid connection issues
+let supabaseClient: any = null;
+
+const client = () => {
+  if (!supabaseClient) {
+    const url = Deno.env.get("SUPABASE_URL");
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!url || !key) {
+      throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set");
+    }
+    
+    supabaseClient = createClient(url, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    });
+  }
+  return supabaseClient;
+};
 
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
@@ -31,12 +49,33 @@ export const set = async (key: string, value: any): Promise<void> => {
 
 // Get retrieves a key-value pair from the database.
 export const get = async (key: string): Promise<any> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_c5bcdb1f").select("value").eq("key", key).maybeSingle();
-  if (error) {
-    throw new Error(error.message);
+  const supabase = client();
+  
+  try {
+    const { data, error } = await supabase
+      .from("kv_store_c5bcdb1f")
+      .select("value")
+      .eq("key", key)
+      .maybeSingle();
+    
+    if (error) {
+      console.error(`[KV] Error getting key ${key}:`, error);
+      throw new Error(error.message);
+    }
+    
+    return data?.value;
+    
+  } catch (error: any) {
+    console.error(`[KV] Exception in get for ${key}:`, error);
+    
+    // If connection reset, return null instead of failing
+    if (error.message?.includes('connection reset') || error.message?.includes('connection error')) {
+      console.warn(`[KV] Connection error for key ${key}, returning null`);
+      return null;
+    }
+    
+    throw error;
   }
-  return data?.value;
 };
 
 // Delete deletes a key-value pair from the database.
@@ -78,10 +117,33 @@ export const mdel = async (keys: string[]): Promise<void> => {
 
 // Search for key-value pairs by prefix.
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_c5bcdb1f").select("key, value").like("key", prefix + "%");
-  if (error) {
-    throw new Error(error.message);
+  const supabase = client();
+  
+  try {
+    console.log(`[KV] Getting keys with prefix: ${prefix}`);
+    
+    const { data, error } = await supabase
+      .from("kv_store_c5bcdb1f")
+      .select("key, value")
+      .like("key", prefix + "%");
+    
+    if (error) {
+      console.error(`[KV] Error getting by prefix ${prefix}:`, error);
+      throw new Error(error.message);
+    }
+    
+    console.log(`[KV] Found ${data?.length || 0} records with prefix ${prefix}`);
+    return data?.map((d) => d.value) ?? [];
+    
+  } catch (error: any) {
+    console.error(`[KV] Exception in getByPrefix for ${prefix}:`, error);
+    
+    // If connection reset, return empty array instead of failing
+    if (error.message?.includes('connection reset') || error.message?.includes('connection error')) {
+      console.warn(`[KV] Connection error for prefix ${prefix}, returning empty array`);
+      return [];
+    }
+    
+    throw error;
   }
-  return data?.map((d) => d.value) ?? [];
 };

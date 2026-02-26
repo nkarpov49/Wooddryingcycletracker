@@ -103,6 +103,8 @@ const translations: Translations = {
   selectLine: { ru: "Выберите линию", lt: "Pasirinkite liniją" },
   line1And2: { ru: "1 и 2 линия", lt: "1 ir 2 linija" },
   line3: { ru: "3 линия", lt: "3 linija" },
+  line1: { ru: "1 линия", lt: "1 linija" },
+  line2: { ru: "2 линия", lt: "2 linija" },
   leaderLine1And2Title: { ru: "Лидер • 1 и 2 линия", lt: "Lyderis • 1 ir 2 linija" },
   leaderLine3Title: { ru: "Лидер • 3 линия", lt: "Lyderis • 3 linija" },
   activeChambers: { ru: "Активные камеры", lt: "Aktyvios džiovyklos" },

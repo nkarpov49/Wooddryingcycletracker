@@ -19,6 +19,7 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
     if (type.includes('oak') || type.includes('ąžuolas')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     if (type.includes('alder') || type.includes('alksnis')) return 'bg-gray-100 text-gray-800 border-gray-200';
     if (type.includes('maple') || type.includes('ash') || type.includes('uosis')) return 'bg-green-100 text-green-800 border-green-200';
+    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
@@ -29,17 +30,18 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
         <div className="flex items-start gap-2.5 mb-2">
           <AlertCircle className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <div className="text-xs font-bold text-orange-600 uppercase tracking-wide mb-1">
-              {lineLabel}
+            {/* Line Badge - ЗАМЕТНЫЙ */}
+            <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white px-3 py-1 rounded-lg font-black text-xs inline-block mb-2 shadow-md">
+              {lineLabel.toUpperCase()}
             </div>
-            <div className="text-lg font-bold text-gray-900 mb-2">
+            <div className="text-xl font-bold text-gray-900 mb-2">
               #{workCycle.sequentialNumber}
             </div>
-            <div className="text-sm text-gray-600 mb-2">
+            <div className="text-sm text-gray-600 mb-2 font-mono bg-white px-2 py-1 rounded">
               {workCycle.rawText}
             </div>
             <div className="text-xs text-orange-700 font-medium">
-              {t('notFoundInDatabase')}
+              ⚠️ {t('notFoundInDatabase')}
             </div>
           </div>
         </div>
@@ -59,15 +61,18 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
     >
       {/* Header */}
       <div className="flex justify-between items-start mb-2.5">
-        <div>
-          <div className="text-xs font-bold text-green-600 uppercase tracking-wide mb-1">
-            {lineLabel}
+        <div className="flex items-center gap-2">
+          {/* Line Badge - ЗАМЕТНЫЙ */}
+          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg font-black text-sm shadow-md">
+            {lineLabel.toUpperCase()}
           </div>
-          <div className="text-xl font-black text-gray-900">
-            #{workCycle.sequentialNumber}
-          </div>
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         </div>
-        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+      </div>
+
+      {/* Sequential Number - КРУПНО */}
+      <div className="text-2xl font-black text-gray-900 mb-2.5">
+        #{workCycle.sequentialNumber}
       </div>
 
       {/* Wood Type - КОМПАКТНО */}

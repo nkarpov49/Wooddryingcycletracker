@@ -18,6 +18,7 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
     if (type.includes('oak')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
     if (type.includes('alder')) return 'bg-gray-100 text-gray-800 border-gray-200';
     if (type.includes('maple') || type.includes('ash')) return 'bg-green-100 text-green-800 border-green-200';
+    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
