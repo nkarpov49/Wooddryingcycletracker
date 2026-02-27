@@ -98,6 +98,10 @@ const translations: Translations = {
   addMore: { ru: "Добавить", lt: "Pridėti" },
   existingPhotos: { ru: "Существующие фото", lt: "Esamos nuotraukos" },
   newPhotos: { ru: "Новые фото", lt: "Naujos nuotraukos" },
+  photoAddedFromClipboard: { ru: "Фото добавлено из буфера обмена! 📋✨", lt: "Nuotrauka pridėta iš mainų srities! 📋✨" },
+  pasteHint: { ru: "Нажмите Ctrl+V для вставки скриншота", lt: "Paspauskite Ctrl+V nuotraukos įkėlimui" },
+  keyboardReminder: { ru: "Напоминание о клавишах", lt: "Klavišų priminimas" },
+  tipLabel: { ru: "Совет", lt: "Patarimas" },
   logout: { ru: "Выход", lt: "Atsijungti" },
   // Packer/Leader Line Selection
   selectLine: { ru: "Выберите линию", lt: "Pasirinkite liniją" },
@@ -122,6 +126,10 @@ const translations: Translations = {
   notFoundInDatabase: { ru: "Не найдено в базе", lt: "Nerasta duomenų bazėje" },
   cancel: { ru: "Отмена", lt: "Atšaukti" },
   dataUpdated: { ru: "Данные обновлены", lt: "Duomenys atnaujinti" },
+  // Role Selection
+  operator: { ru: "Оператор", lt: "Operatorius" },
+  packer: { ru: "Лидер", lt: "Lyderis" },
+  admin: { ru: "Администратор", lt: "Administratorius" },
 };
 
 type LanguageContextType = {

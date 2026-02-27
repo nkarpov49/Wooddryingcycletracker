@@ -62,8 +62,8 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
       {/* Header */}
       <div className="flex justify-between items-start mb-2.5">
         <div className="flex items-center gap-2">
-          {/* Line Badge - ЗАМЕТНЫЙ */}
-          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-3 py-1.5 rounded-lg font-black text-sm shadow-md">
+          {/* Line Badge - ЗАМЕТНЫЙ И КРУПНЫЙ ДЛЯ СТАРИКОВ */}
+          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white px-4 py-2 rounded-lg font-black text-lg shadow-md">
             {lineLabel.toUpperCase()}
           </div>
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

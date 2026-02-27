@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, Check, Loader2, X, LogOut, Plus, Trash2, Image, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Camera, Check, Loader2, X, LogOut, Plus, Trash2, Image, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Clipboard } from 'lucide-react';
 import { api, DryingCycle } from '../../utils/api';
 import { toast } from 'sonner@2.0.3';
 import { format } from 'date-fns';
@@ -73,6 +73,56 @@ export default function OperatorView() {
     // Reset input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // Обработчик вставки из буфера обмена (Ctrl+V)
+  const handlePaste = async (e: ClipboardEvent) => {
+    // Работает только когда модальное окно открыто
+    if (!selectedChamber) return;
+
+    // Получаем данные из буфера обмена
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Ищем изображение в буфере обмена
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      // Проверяем, что это изображение
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault(); // Предотвращаем стандартное поведение
+        
+        const blob = item.getAsFile();
+        if (!blob) continue;
+
+        // Создаем File объект с правильным именем
+        const timestamp = format(new Date(), 'yyyy-MM-dd_HH-mm-ss');
+        const file = new File([blob], `screenshot_${timestamp}.png`, { type: blob.type });
+        
+        // Создаем URL для превью
+        const url = URL.createObjectURL(file);
+        
+        // Добавляем в список фото
+        setStagedPhotos(prev => [...prev, { file, url }]);
+        
+        // Показываем уведомление
+        toast.success(t('photoAddedFromClipboard') || 'Фото добавлено из буфера обмена! 📋✨');
+        
+        break; // Обрабатываем только первое изображение
+      }
+    }
+  };
+
+  // Добавляем/удаляем слушатель события paste
+  useEffect(() => {
+    if (selectedChamber) {
+      // Добавляем глобальный слушатель paste
+      document.addEventListener('paste', handlePaste);
+      
+      return () => {
+        document.removeEventListener('paste', handlePaste);
+      };
+    }
+  }, [selectedChamber]); // Пересоздаем слушатель при изменении выбранной камеры
 
   const removePhoto = (index: number) => {
     setStagedPhotos(prev => prev.filter((_, i) => i !== index));
@@ -264,6 +314,20 @@ export default function OperatorView() {
             {stagedPhotos.length > 0 ? (
               <div className="w-full max-w-md">
                   <h3 className="text-lg font-bold text-gray-300 mb-3">{t('newPhotos')}</h3>
+                  
+                  {/* Подсказка про Ctrl+V */}
+                  <div className="mb-4 bg-blue-900/50 border border-blue-500/50 rounded-lg p-3 flex items-center gap-3">
+                    <div className="bg-blue-500/20 rounded-lg p-2">
+                      <svg className="w-6 h-6 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs text-blue-200 font-bold mb-0.5">💡 {t('tipLabel')}</div>
+                      <div className="text-sm text-blue-100">{t('pasteHint')}</div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4 mb-4">
                       {stagedPhotos.map((photo, idx) => (
                           <div key={idx} className="relative aspect-[3/4] bg-black rounded-xl overflow-hidden border border-green-500 group">
@@ -301,6 +365,26 @@ export default function OperatorView() {
                   </p>
                 )}
                 <p className="text-gray-500">{t('takeSettingsPhoto')}</p>
+                
+                {/* Подсказка про Ctrl+V (когда нет фото) */}
+                <div className="mt-6 bg-blue-900/30 border border-blue-500/30 rounded-lg p-4 max-w-sm mx-auto">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-blue-500/20 rounded-lg p-2 flex-shrink-0">
+                      <svg className="w-5 h-5 text-blue-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <div className="text-xs text-blue-200 font-bold mb-1">⌨️ {t('keyboardReminder')}</div>
+                      <div className="text-sm text-blue-100 leading-relaxed">{t('pasteHint')}</div>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-blue-300">
+                        <kbd className="bg-gray-700 px-2 py-1 rounded">Print Screen</kbd>
+                        <span>→</span>
+                        <kbd className="bg-gray-700 px-2 py-1 rounded">Ctrl+V</kbd>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
