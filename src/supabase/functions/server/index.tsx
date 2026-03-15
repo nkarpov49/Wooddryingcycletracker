@@ -100,9 +100,39 @@ routes.get('/health', (c) => {
   return c.json({ status: "ok" });
 });
 
+// Alias for driver view compatibility
+// NOTE: Этот endpoint сохраняет генерацию signed URLs для совместимости с DriverView
+// Там обычно небольшое количество циклов (только завершенные для взвешивания), поэтому не критично
+routes.get('/work-cycles', async (c) => {
+  try {
+    console.log('[WorkCycles] Запрос на получение рабочих циклов');
+    
+    const cycles = await kv.getByPrefix("cycle_");
+    console.log(`[WorkCycles] Загружено ${cycles.length} циклов`);
+    
+    const signedCycles = await Promise.all(cycles.map(async (cycle: any) => {
+      if (!cycle) return null;
+      try {
+        return await signCycleUrls(cycle);
+      } catch (signError: any) {
+        console.error(`[WorkCycles] Ошибка подписания URL для цикла ${cycle.id}:`, signError);
+        return cycle;
+      }
+    }));
+    
+    const validCycles = signedCycles.filter(c => c !== null);
+    validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    
+    return c.json(validCycles);
+  } catch (error: any) {
+    console.error("[WorkCycles] Ошибка получения циклов:", error);
+    return c.json([]);
+  }
+});
+
 routes.get('/cycles', async (c) => {
   try {
-    console.log('[Cycles] Запрос на получение циклов');
+    console.log('[Cycles] Запрос на получение циклов (без фотографий)');
     
     const cycles = await kv.getByPrefix("cycle_");
     console.log(`[Cycles] Загружено ${cycles.length} циклов`);
@@ -118,20 +148,12 @@ routes.get('/cycles', async (c) => {
       console.log(`[Cycles] Отфильтровано по sequentialNumber ${sequentialNumber}: ${filteredCycles.length} циклов`);
     }
     
-    const signedCycles = await Promise.all(filteredCycles.map(async (cycle: any) => {
-      if (!cycle) return null;
-      try {
-        return await signCycleUrls(cycle);
-      } catch (signError: any) {
-        console.error(`[Cycles] Ошибка подписания URL для цикла ${cycle.id}:`, signError);
-        return cycle; // Возвращаем без подписанных URL
-      }
-    }));
-    
-    const validCycles = signedCycles.filter(c => c !== null);
+    // ✅ ОПТИМИЗАЦИЯ: Не генерируем signed URLs для списка циклов
+    // Фотографии будут загружаться только при открытии конкретного цикла через GET /cycles/:id
+    const validCycles = filteredCycles.filter(c => c !== null);
     validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
-    console.log(`[Cycles] Возвращаем ${validCycles.length} циклов`);
+    console.log(`[Cycles] Возвращаем ${validCycles.length} циклов БЕЗ signed URLs`);
     return c.json(validCycles);
   } catch (error: any) {
     console.error("[Cycles] Критическая ошибка получения циклов:", error);
@@ -139,6 +161,57 @@ routes.get('/cycles', async (c) => {
     
     // Возвращаем пустой массив вместо ошибки 500
     return c.json([]);
+  }
+});
+
+// ✅ НОВЫЙ ENDPOINT: Получение одного цикла с фотографиями
+routes.get('/cycles/:id', async (c) => {
+  try {
+    const id = c.req.param("id");
+    console.log(`[Cycle] Запрос на получение цикла ${id} с фотографиями`);
+    
+    const cycle = await kv.get(`cycle_${id}`);
+    if (!cycle) {
+      console.log(`[Cycle] Цикл ${id} не найден`);
+      return c.json({ error: "Cycle not found" }, 404);
+    }
+    
+    // Генерируем signed URLs только для этого одного цикла
+    const signedCycle = await signCycleUrls(cycle);
+    console.log(`[Cycle] Цикл ${id} возвращен с signed URLs`);
+    
+    return c.json(signedCycle);
+  } catch (error: any) {
+    console.error(`[Cycle] Ошибка получения цикла:`, error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// ✅ НОВЫЙ ENDPOINT: Удаление истории взвешиваний
+routes.delete('/cycles/:id/weighing-history', async (c) => {
+  try {
+    const id = c.req.param("id");
+    console.log(`[Cycle] Запрос на удаление истории взвешиваний для цикла ${id}`);
+    
+    const cycle = await kv.get(`cycle_${id}`);
+    if (!cycle) {
+      console.log(`[Cycle] Цикл ${id} не найден`);
+      return c.json({ error: "Cycle not found" }, 404);
+    }
+    
+    // Удаляем историю взвешиваний
+    const updatedCycle = {
+      ...cycle,
+      weighingHistory: []
+    };
+    
+    await kv.set(`cycle_${id}`, updatedCycle);
+    console.log(`[Cycle] История взвешиваний удалена для цикла ${id}`);
+    
+    return c.json({ success: true, message: "Weighing history cleared" });
+  } catch (error: any) {
+    console.error(`[Cycle] Ошибка удаления истории взвешиваний:`, error);
+    return c.json({ error: error.message }, 500);
   }
 });
 
@@ -184,6 +257,36 @@ routes.put('/cycles/:id', async (c) => {
     return c.json(updated);
   } catch (error: any) {
     console.error("Error updating cycle:", error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Alias for driver view - update cycle with weighing result
+routes.put('/update-cycle', async (c) => {
+  try {
+    const body = await c.req.json();
+    const { id, weighingResult } = body;
+    
+    if (!id) {
+      return c.json({ error: "Cycle ID required" }, 400);
+    }
+    
+    const existing = await kv.get(`cycle_${id}`);
+    if (!existing) {
+      return c.json({ error: "Cycle not found" }, 404);
+    }
+    
+    const updated = { 
+      ...existing, 
+      weighingResult,
+      weighedAt: new Date().toISOString()
+    };
+    
+    await kv.set(`cycle_${id}`, updated);
+    console.log(`[Driver] Цикл ${id} обновлён результатами взвешивания`);
+    return c.json(updated);
+  } catch (error: any) {
+    console.error("Error updating cycle with weighing:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -789,8 +892,215 @@ routes.post('/sheets/sync-progress', async (c) => {
   }
 });
 
+// POST /analyze-weight - Analyze weight from scale photo using OpenAI Vision
+routes.post('/analyze-weight', async (c) => {
+  try {
+    const { image } = await c.req.json();
+    
+    if (!image) {
+      return c.json({ error: 'No image provided' }, 400);
+    }
+
+    const openAIKey = Deno.env.get('OPENAI_API_KEY');
+    if (!openAIKey) {
+      console.error('OPENAI_API_KEY not configured');
+      return c.json({ error: 'OpenAI API key not configured' }, 500);
+    }
+
+    // Отправляем изображение на OpenAI Vision API
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openAIKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Look at this image of a scale/weighing device. Extract ONLY the weight number in tons (t). Return ONLY a number, nothing else. If you see multiple numbers, return the largest weight value. Examples: "10.5" or "12.3". If no weight is visible, return "0".'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: image
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 50
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', errorText);
+      return c.json({ error: 'Failed to analyze image', details: errorText }, 500);
+    }
+
+    const data = await response.json();
+    const weightText = data.choices?.[0]?.message?.content?.trim();
+    const weight = parseFloat(weightText || '0');
+
+    console.log(`Weight analyzed: ${weight} tons`);
+    
+    return c.json({ weight: isNaN(weight) ? 0 : weight });
+    
+  } catch (error: any) {
+    console.error('Error analyzing weight:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// НОВЫЙ: Получить настройки пород дерева
+routes.get('/wood-settings', async (c) => {
+  try {
+    console.log('[WoodSettings] Запрос настроек пород дерева');
+    
+    const settings = await kv.get('wood_type_settings');
+    
+    if (!settings) {
+      console.log('[WoodSettings] Настройки не найдены, возвращаем пустой массив');
+      return c.json([]);
+    }
+    
+    console.log('[WoodSettings] Найдены настройки для пород:', settings.length);
+    return c.json(settings);
+  } catch (error: any) {
+    console.error('[WoodSettings] Ошибка получения настроек:', error);
+    return c.json([]);
+  }
+});
+
+// НОВЫЙ: Сохранить настройки пород дерева
+routes.post('/wood-settings', async (c) => {
+  try {
+    console.log('[WoodSettings] Сохранение настроек пород дерева');
+    
+    const body = await c.req.json();
+    
+    if (!Array.isArray(body)) {
+      return c.json({ error: 'Неверный формат данных' }, 400);
+    }
+    
+    await kv.set('wood_type_settings', body);
+    
+    console.log('[WoodSettings] Настройки сохранены для пород:', body.length);
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[WoodSettings] Ошибка сохранения настроек:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Проверка общего пароля приложения
+routes.post('/check-app-password', async (c) => {
+  try {
+    const { password } = await c.req.json();
+    
+    // Получаем сохраненный пароль из KV
+    let savedPassword = await kv.get('app_password');
+    
+    // Если пароль не установлен, используем дефолтный
+    if (!savedPassword) {
+      savedPassword = 'drytrack2024';
+    }
+    
+    console.log('[AppPassword] Проверка пароля приложения');
+    
+    if (password === savedPassword) {
+      return c.json({ success: true });
+    } else {
+      return c.json({ success: false, error: 'Invalid password' });
+    }
+  } catch (error: any) {
+    console.error('[AppPassword] Ошибка проверки пароля:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// Проверка пароля администратора
+routes.post('/check-admin-password', async (c) => {
+  try {
+    const { password } = await c.req.json();
+    
+    // Получаем сохраненный пароль администратора из KV
+    let savedPassword = await kv.get('admin_password');
+    
+    // Если пароль не установлен, используем дефолтный
+    if (!savedPassword) {
+      savedPassword = 'admin2024';
+    }
+    
+    console.log('[AdminPassword] Проверка пароля администратора');
+    
+    if (password === savedPassword) {
+      return c.json({ success: true });
+    } else {
+      return c.json({ success: false, error: 'Invalid password' });
+    }
+  } catch (error: any) {
+    console.error('[AdminPassword] Ошибка проверки пароля:', error);
+    return c.json({ success: false, error: error.message }, 500);
+  }
+});
+
+// Получить настройки паролей (только для админа)
+routes.get('/password-settings', async (c) => {
+  try {
+    const appPassword = await kv.get('app_password') || 'drytrack2024';
+    const adminPassword = await kv.get('admin_password') || 'admin2024';
+    
+    return c.json({ 
+      appPassword,
+      adminPassword 
+    });
+  } catch (error: any) {
+    console.error('[PasswordSettings] Ошибка получения настроек паролей:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Обновить настройки паролей (только для админа)
+routes.post('/password-settings', async (c) => {
+  try {
+    const { appPassword, adminPassword } = await c.req.json();
+    
+    if (appPassword) {
+      await kv.set('app_password', appPassword);
+      console.log('[PasswordSettings] Пароль приложения обновлен');
+    }
+    
+    if (adminPassword) {
+      await kv.set('admin_password', adminPassword);
+      console.log('[PasswordSettings] Пароль администратора обновлен');
+    }
+    
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[PasswordSettings] Ошибка сохранения паролей:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 // Mount Routes
 app.route('/make-server-c5bcdb1f', routes);
 app.route('/functions/v1/make-server-c5bcdb1f', routes);
+
+// Initialize bucket on startup
+(async () => {
+  try {
+    console.log('[Server] Initializing storage bucket...');
+    await ensureBucket();
+    console.log('[Server] Storage bucket ready');
+  } catch (error) {
+    console.error('[Server] Bucket initialization failed:', error);
+  }
+})();
 
 Deno.serve(app.fetch);

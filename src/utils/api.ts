@@ -18,6 +18,17 @@ export interface CyclePhoto {
   caption?: string;
 }
 
+export interface WeighingRecord {
+  timestamp: string; // ISO дата и время взвешивания
+  hoursFromStart: number; // Часов с момента старта цикла
+  hoursSinceLastCheck?: number; // Часов с последней проверки (если не первое)
+  weights: number[]; // Массив весов ящиков в тоннах
+  totalWeight: number; // Общий вес (сумма)
+  recommendation: string; // "+8 часов" или "Забрать дерево"
+  driverName?: string; // Кто взвешивал (опционально)
+  weightLimit?: number; // Целевой вес (допуск) в тоннах для этого взвешивания
+}
+
 export interface DryingCycle {
   id?: string;
   chamberNumber: number;
@@ -50,6 +61,9 @@ export interface DryingCycle {
   
   // Progress (from Google Sheets)
   progressPercent?: number; // 0-100
+  
+  // Weighing History (from Driver)
+  weighingHistory?: WeighingRecord[];
 }
 
 export interface CurrentWorkCycle {
@@ -67,6 +81,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   };
   
   console.log(`[API] Запрос к: ${url}`);
+  console.log(`[API] Headers:`, headers);
+  console.log(`[API] Options:`, options);
   
   try {
     const response = await fetch(url, { ...options, headers });
@@ -76,14 +92,17 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`[API] Ошибка ${response.status}:`, errorText);
-      throw new Error(errorText || response.statusText);
+      throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
     }
     
     const data = await response.json();
-    console.log(`[API] Данные получены от ${url}:`, data);
+    console.log(`[API] Данные получены от ${url}, количество записей:`, Array.isArray(data) ? data.length : 'не массив');
     return data;
-  } catch (error) {
+  } catch (error: any) {
     console.error(`[API] Ошибка запроса к ${url}:`, error);
+    console.error(`[API] Тип ошибки:`, error.name);
+    console.error(`[API] Сообщение:`, error.message);
+    console.error(`[API] Stack:`, error.stack);
     throw error;
   }
 }
@@ -118,6 +137,10 @@ export const api = {
     return fetchWithAuth(`${BASE_URL}/cycles`);
   },
   
+  getCycle: async (id: string) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
+  },
+  
   createCycle: async (cycle: DryingCycle) => {
     return fetchWithAuth(`${BASE_URL}/cycles`, {
       method: 'POST',
@@ -133,9 +156,11 @@ export const api = {
   },
   
   deleteCycle: async (id: string) => {
-    return fetchWithAuth(`${BASE_URL}/cycles/${id}`, {
-      method: 'DELETE',
-    });
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}`, { method: 'DELETE' });
+  },
+  
+  clearWeighingHistory: async (id: string) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history`, { method: 'DELETE' });
   },
   
   uploadFile: async (file: File) => {

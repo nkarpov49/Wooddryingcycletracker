@@ -1,22 +1,25 @@
-import React, { useState, useEffect } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { 
-  Edit, Trash2, CheckCircle, Droplets, Star, X, Copy, CloudSun, Calendar, Moon, Sun, ArrowDown, ArrowUp, Clock
-} from "lucide-react";
-import { api, DryingCycle } from "../utils/api";
-import { format, differenceInHours } from "date-fns";
-import { toast } from "sonner@2.0.3";
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router';
+import { api, DryingCycle, WeighingRecord } from '../utils/api';
+import { ArrowLeft, Star, Edit, Trash2, CheckCircle, Droplets, TrendingUp, Calendar, X, Sun, Moon, ArrowDown, ArrowUp, CloudSun, Clock, Scale } from 'lucide-react';
+import { format, differenceInHours } from 'date-fns';
+import { toast } from 'sonner@2.0.3';
 import { useLanguage } from "../utils/i18n";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { useAuth } from '../contexts/AuthContext';
+import WeightProgressChart from './WeightProgressChart';
+import AdvancedPhotoGallery from './AdvancedPhotoGallery';
 
 export default function CycleDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [cycle, setCycle] = useState<DryingCycle | null>(null);
   const [loading, setLoading] = useState(true);
-  const [fullscreenPhoto, setFullscreenPhoto] = useState<any>(null);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
   const { t } = useLanguage();
+  const { role } = useAuth();
 
   useEffect(() => {
     if (id) loadCycle(id);
@@ -24,16 +27,18 @@ export default function CycleDetail() {
 
   async function loadCycle(cycleId: string) {
     try {
-      const cycles = await api.getCycles();
-      const found = cycles.find((c: any) => c.id === cycleId);
-      if (found) {
-        setCycle(found);
+      // ✅ ОПТИМИЗАЦИЯ: Загружаем только один цикл с фотографиями
+      const cycle = await api.getCycle(cycleId);
+      if (cycle) {
+        setCycle(cycle);
       } else {
         toast.error(t('cyclesNotFound'));
-        navigate("/");
+        navigate('/');
       }
     } catch (err) {
+      console.error('Error loading cycle:', err);
       toast.error(t('error'));
+      navigate('/');
     } finally {
       setLoading(false);
     }
@@ -53,6 +58,20 @@ export default function CycleDetail() {
   const handleCopy = () => {
     if (!cycle) return;
     navigate("/new", { state: { copyFrom: cycle } });
+  };
+  
+  const handleClearWeighingHistory = async () => {
+    if (!id) return;
+    try {
+      await api.clearWeighingHistory(id);
+      toast.success(t('historyCleared'));
+      setShowClearHistoryConfirm(false);
+      // Перезагрузить цикл для обновления данных
+      loadCycle(id);
+    } catch (err) {
+      console.error('Error clearing weighing history:', err);
+      toast.error(t('error'));
+    }
   };
 
   if (loading) return <div className="p-8 text-center">{t('loading')}</div>;
@@ -114,9 +133,9 @@ export default function CycleDetail() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
         <div className="space-y-6">
             {/* Title Card */}
-            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 relative overflow-hidden">
-              <div className={`absolute top-0 right-0 px-3 py-1 text-xs font-bold rounded-bl-xl ${
-                 isCompleted ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+            <div className="glass rounded-3xl p-6 shadow-apple-md border border-white/20 relative overflow-hidden">
+              <div className={`absolute top-0 right-0 px-4 py-2 text-xs font-semibold rounded-bl-2xl backdrop-blur-sm ${
+                 isCompleted ? 'bg-success/20 text-success border-l border-b border-success/30' : 'bg-warning/20 text-warning border-l border-b border-warning/30'
               }`}>
                 {isCompleted ? t('completed').toUpperCase() : t('inProgress').toUpperCase()}
               </div>
@@ -209,10 +228,12 @@ export default function CycleDetail() {
 
             {/* Results Card */}
             {(isCompleted || hasResults) && (
-              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  {t('resultsAndQuality')}
+              <div className="glass rounded-3xl p-6 shadow-apple-md border border-white/20">
+                <h3 className="font-semibold text-foreground mb-5 flex items-center gap-2">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-success to-green-400 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-lg">{t('resultsAndQuality')}</span>
                 </h3>
                 
                 {!cycle.finalMoisture && !cycle.qualityRating ? (
@@ -251,6 +272,124 @@ export default function CycleDetail() {
                 )}
               </div>
             )}
+            
+            {/* Weight Progress Chart */}
+            {cycle.weighingHistory && cycle.weighingHistory.length > 1 && (
+              <WeightProgressChart 
+                weighingHistory={cycle.weighingHistory}
+                targetWeight={cycle.weighingHistory[cycle.weighingHistory.length - 1]?.weightLimit}
+              />
+            )}
+            
+            {/* Weighing History Card */}
+            {cycle.weighingHistory && cycle.weighingHistory.length > 0 && (
+              <div className="glass rounded-3xl p-6 shadow-apple-md border border-white/20">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-blue-400 flex items-center justify-center">
+                      <Scale className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="text-lg">{t('weighingHistory')}</span>
+                  </h3>
+                  {/* Кнопка удаления истории */}
+                  <button
+                    onClick={() => setShowClearHistoryConfirm(true)}
+                    className="p-2.5 text-destructive hover:bg-destructive/10 rounded-xl transition-apple"
+                    title={t('clearHistory')}
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {cycle.weighingHistory.map((record: WeighingRecord, index: number) => (
+                    <div 
+                      key={index}
+                      className="glass rounded-2xl p-4 border border-white/30 shadow-apple-sm"
+                    >
+                      {/* Header - только кружок с номером и дата */}
+                      <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200/50">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-blue-400 text-white flex items-center justify-center text-sm font-bold shadow-apple-sm">
+                            {index + 1}
+                          </div>
+                          <div className="text-sm text-muted-foreground font-medium">
+                            {format(new Date(record.timestamp), 'dd.MM.yyyy HH:mm')}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Time Info */}
+                      <div className="grid grid-cols-2 gap-3 mb-3">
+                        <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 text-center border border-white/40">
+                          <div className="text-xs text-muted-foreground mb-1 font-medium">{t('fromCycleStart')}</div>
+                          <div className="font-bold text-primary text-base">
+                            {record.hoursFromStart} {t('hoursShort')}
+                          </div>
+                        </div>
+                        {record.hoursSinceLastCheck !== undefined && (
+                          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 text-center border border-white/40">
+                            <div className="text-xs text-muted-foreground mb-1 font-medium">{t('sinceLastCheck')}</div>
+                            <div className="font-bold text-purple-600 text-base">
+                              {record.hoursSinceLastCheck} {t('hoursShort')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Weights - с цветовой индикацией */}
+                      <div className="mb-3">
+                        <div className="text-xs font-semibold text-foreground/70 mb-2 flex items-center gap-1.5">
+                          <span>📦</span> 
+                          <span>Вес ящиков</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {record.weights.map((weight, i) => {
+                            // Определяем цвет ячейки на основе целевого веса из записи
+                            const targetWeight = record.weightLimit;
+                            let bgColor = 'bg-gray-300';
+                            let textColor = 'text-gray-900';
+                            
+                            if (targetWeight !== undefined) {
+                              if (weight <= targetWeight) {
+                                // Вес меньше или равен допуску - готово (зеленый)
+                                bgColor = 'bg-gradient-to-br from-success to-green-400';
+                                textColor = 'text-white';
+                              } else {
+                                // Вес больше допуска - нужно сушить (красный)
+                                bgColor = 'bg-gradient-to-br from-destructive to-red-400';
+                                textColor = 'text-white';
+                              }
+                            }
+                            
+                            return (
+                              <div 
+                                key={i}
+                                className={`${bgColor} rounded-xl px-2 py-2 text-center shadow-apple-sm`}
+                              >
+                                <div className={`font-bold ${textColor} text-sm`}>
+                                  {weight}т
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* Recommendation */}
+                      <div className={`rounded-xl p-3 border-2 backdrop-blur-sm shadow-apple-sm ${
+                        record.recommendation.includes('Готово') || record.recommendation.includes('забрать')
+                          ? 'bg-success/10 border-success/30 text-success'
+                          : 'bg-warning/10 border-warning/30 text-warning'
+                      }`}>
+                        <div className="text-xs font-semibold mb-1 opacity-80">💡 Рекомендация</div>
+                        <div className="font-semibold text-sm">{record.recommendation}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
         </div>
 
         {/* Gallery */}
@@ -260,15 +399,13 @@ export default function CycleDetail() {
             {allPhotos.map((photo, idx) => (
               <div 
                 key={idx} 
-                onClick={() => {
-                  setFullscreenPhoto(photo);
-                }}
-                className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 shadow-sm cursor-zoom-in group"
+                onClick={() => setFullscreenPhoto(idx)}
+                className="relative aspect-square rounded-2xl overflow-hidden border border-white/30 shadow-apple-sm cursor-zoom-in group"
               >
                 <ImageWithFallback src={photo.url} alt={photo.caption} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-2 text-xs truncate">
-                  <span className="font-bold mr-1">{photo.title}</span>
-                  {photo.caption && <span className="opacity-80">- {photo.caption}</span>}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent text-white p-3 text-xs">
+                  <span className="font-bold block">{photo.title}</span>
+                  {photo.caption && <span className="opacity-80 text-xs">{photo.caption}</span>}
                 </div>
               </div>
             ))}
@@ -276,32 +413,13 @@ export default function CycleDetail() {
         </div>
       </div>
 
-      {/* Fullscreen Modal */}
-      {fullscreenPhoto && (
-        <div 
-          className="fixed inset-0 z-50 bg-black flex items-center justify-center"
-          onClick={() => setFullscreenPhoto(null)}
-        >
-          <button className="fixed top-4 right-4 text-white p-2 bg-white/20 rounded-full z-50 hover:bg-white/30">
-            <X className="w-6 h-6" />
-          </button>
-          
-          <div 
-            className="w-full h-full overflow-auto flex items-center justify-center p-4"
-            onClick={(e) => e.stopPropagation()} 
-          >
-             <ImageWithFallback 
-               src={fullscreenPhoto.url} 
-               alt={fullscreenPhoto.caption} 
-               className="max-h-full max-w-full object-contain"
-             />
-          </div>
-          
-          <div className="fixed bottom-0 left-0 right-0 bg-black/50 text-white p-4 text-center backdrop-blur-sm z-50 pointer-events-none">
-            <p className="font-bold text-lg">{fullscreenPhoto.title}</p>
-            {fullscreenPhoto.caption && <p className="text-gray-200 mt-1">{fullscreenPhoto.caption}</p>}
-          </div>
-        </div>
+      {/* Advanced Photo Gallery Modal */}
+      {fullscreenPhoto !== null && (
+        <AdvancedPhotoGallery
+          photos={allPhotos}
+          initialIndex={fullscreenPhoto}
+          onClose={() => setFullscreenPhoto(null)}
+        />
       )}
 
       {/* Delete Modal */}
@@ -320,6 +438,38 @@ export default function CycleDetail() {
               <button 
                 onClick={handleDelete}
                 className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium"
+              >
+                {t('delete')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Clear Weighing History Modal */}
+      {showClearHistoryConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full shadow-2xl">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-red-100 p-3 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">{t('clearHistoryConfirm')}</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              {t('clearHistoryWarning')}
+              <span className="font-bold text-red-600"> {t('cannotUndo')}</span>
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowClearHistoryConfirm(false)}
+                className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+              >
+                {t('cancel')}
+              </button>
+              <button 
+                onClick={handleClearWeighingHistory}
+                className="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
               >
                 {t('delete')}
               </button>

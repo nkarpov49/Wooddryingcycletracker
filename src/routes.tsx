@@ -6,12 +6,15 @@ import { Toaster } from "sonner@2.0.3";
 import LoginScreen from "./components/roles/LoginScreen";
 import OperatorView from "./components/roles/OperatorView";
 import PackerViewNew from "./components/roles/PackerViewNew";
+import DriverView from "./components/roles/DriverView";
 import CycleList from "./components/CycleList";
 import CycleForm from "./components/CycleForm";
 import CycleDetail from "./components/CycleDetail";
 import AdminLayout from "./components/AdminLayout";
+import WoodTypeSettings from "./components/WoodTypeSettings";
+import PasswordSettings from "./components/PasswordSettings";
 
-function Root() {
+function RootLayout() {
   return (
     <LanguageProvider>
       <AuthProvider>
@@ -28,6 +31,7 @@ function MainRoute() {
     if (!role) return <LoginScreen />;
     if (role === 'operator') return <OperatorView />;
     if (role === 'packer') return <PackerViewNew />;
+    if (role === 'driver') return <DriverView />;
     
     // Admin
     return (
@@ -41,8 +45,9 @@ function AdminRoute({ Component }: { Component: React.ComponentType }) {
     const { role } = useAuth();
     
     if (!role) return <LoginScreen />;
-    if (role === 'operator') return <OperatorView />; // Or redirect?
+    if (role === 'operator') return <OperatorView />;
     if (role === 'packer') return <PackerViewNew />;
+    if (role === 'driver') return <DriverView />;
     
     return (
         <AdminLayout>
@@ -54,12 +59,14 @@ function AdminRoute({ Component }: { Component: React.ComponentType }) {
 export const router = createBrowserRouter([
   {
     path: "/",
-    Component: Root,
+    Component: RootLayout,
     children: [
       { index: true, Component: MainRoute },
       { path: "new", Component: () => <AdminRoute Component={CycleForm} /> },
       { path: "cycle/:id", Component: () => <AdminRoute Component={CycleDetail} /> },
       { path: "edit/:id", Component: () => <AdminRoute Component={CycleForm} /> },
+      { path: "wood-type-settings", Component: () => <AdminRoute Component={WoodTypeSettings} /> },
+      { path: "password-settings", Component: () => <AdminRoute Component={PasswordSettings} /> },
       { path: "*", Component: MainRoute } // Fallback
     ],
   },

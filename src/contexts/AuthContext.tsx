@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type UserRole = 'operator' | 'packer' | 'admin' | null;
+type UserRole = 'operator' | 'packer' | 'admin' | 'driver' | null;
 
 interface AuthContextType {
   role: UserRole;
