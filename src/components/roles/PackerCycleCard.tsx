@@ -2,7 +2,7 @@ import React from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO, differenceInHours } from 'date-fns';
-import { Calendar, Droplets, MessageSquare, Image as ImageIcon, Star } from 'lucide-react';
+import { Calendar, Droplets, MessageSquare, Image as ImageIcon, Star, Scale } from 'lucide-react';
 
 interface PackerCycleCardProps {
   cycle: DryingCycle;
@@ -25,6 +25,7 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
   const hasRecipePhoto = cycle.recipePhotoPath || (cycle.recipePhotos && cycle.recipePhotos.length > 0);
   const hasResultPhoto = cycle.resultPhotos && cycle.resultPhotos.length > 0;
   const hasComment = cycle.overallComment && cycle.overallComment.trim().length > 0;
+  const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
   
   // Calculate duration
   let duration = null;
@@ -95,6 +96,14 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
           <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold">
             <Droplets className="w-3 h-3" />
             <span>{cycle.finalMoisture}%</span>
+          </div>
+        )}
+
+        {/* Weighing Data Indicator */}
+        {hasWeighingData && (
+          <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-bold">
+            <Scale className="w-3 h-3" />
+            <span>{cycle.weighingHistory.length}</span>
           </div>
         )}
 

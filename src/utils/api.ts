@@ -24,7 +24,12 @@ export interface WeighingRecord {
   hoursSinceLastCheck?: number; // Часов с последней проверки (если не первое)
   weights: number[]; // Массив весов ящиков в тоннах
   totalWeight: number; // Общий вес (сумма)
-  recommendation: string; // "+8 часов" или "Забрать дерево"
+  recommendation?: string; // Старый формат: текстовая рекомендация (для обратной совместимости)
+  recommendationData?: {  // Новый формат: структурированные данные
+    type: 'approved' | 'continue';
+    hoursNeeded?: number;
+    endTime?: string;
+  };
   driverName?: string; // Кто взвешивал (опционально)
   weightLimit?: number; // Целевой вес (допуск) в тоннах для этого взвешивания
 }
@@ -64,6 +69,9 @@ export interface DryingCycle {
   
   // Weighing History (from Driver)
   weighingHistory?: WeighingRecord[];
+  
+  // Failed/Wet Cycle Marker
+  isFailed?: boolean; // true if marked as failed/wet
 }
 
 export interface CurrentWorkCycle {
@@ -141,6 +149,11 @@ export const api = {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
   },
   
+  // Alias for getCycle for convenience
+  getCycleById: async (id: string) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
+  },
+  
   createCycle: async (cycle: DryingCycle) => {
     return fetchWithAuth(`${BASE_URL}/cycles`, {
       method: 'POST',
@@ -161,6 +174,14 @@ export const api = {
   
   clearWeighingHistory: async (id: string) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history`, { method: 'DELETE' });
+  },
+  
+  // Mark cycle as failed/wet
+  markCycleAsFailed: async (id: string, isFailed: boolean) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ isFailed }),
+    });
   },
   
   uploadFile: async (file: File) => {

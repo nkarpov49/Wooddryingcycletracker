@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Link, useNavigationType } from "react-router";
 import { 
-  Plus, CheckCircle, Clock, Info, Edit, Search, CloudSun, Calendar, ArrowUpDown, Droplets, Star, AlertTriangle, Image as ImageIcon, MessageSquare, ChevronDown, ChevronUp, Camera, XCircle, X, Filter
+  Plus, CheckCircle, Clock, Info, Edit, Search, CloudSun, Calendar, ArrowUpDown, Droplets, Star, AlertTriangle, Image as ImageIcon, MessageSquare, ChevronDown, ChevronUp, Camera, XCircle, X, Filter, Eye, Scale
 } from "lucide-react";
 import { api, DryingCycle } from "../utils/api";
 import { format, differenceInHours, subDays, parseISO, isAfter, isBefore } from "date-fns";
@@ -37,6 +37,11 @@ export default function CycleList() {
   
   const [searchQuery, setSearchQuery] = useState(storedState?.searchQuery || "");
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  
+  // Advanced Search (Admin)
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [searchByChamber, setSearchByChamber] = useState("");
+  const [searchBySeqNumber, setSearchBySeqNumber] = useState("");
   
   const [activeTab, setActiveTab] = useState<'actual' | 'calendar'>(storedState?.activeTab || 'actual');
   
@@ -132,6 +137,26 @@ export default function CycleList() {
     } catch (err) {
         console.error(err);
         toast.error(t('error'));
+    }
+  };
+
+  const handleToggleFailed = async (e: React.MouseEvent, cycleId: string, currentStatus: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const newStatus = !currentStatus;
+    
+    // Optimistic Update
+    setCycles(prev => prev.map(c => c.id === cycleId ? { ...c, isFailed: newStatus } : c));
+    
+    try {
+        await api.markCycleAsFailed(cycleId, newStatus);
+        toast.success(newStatus ? t('markedAsWet') : t('markedAsSuccess'));
+    } catch (err) {
+        console.error(err);
+        toast.error(t('error'));
+        // Rollback on error
+        setCycles(prev => prev.map(c => c.id === cycleId ? { ...c, isFailed: currentStatus } : c));
     }
   };
 
@@ -468,6 +493,9 @@ export default function CycleList() {
             const hasRecipePhoto = recipePhotosCount > 0;
             const hasResults = cycle.finalMoisture !== undefined || cycle.qualityRating !== undefined;
             const showNotEntered = isCompleted && !hasResults;
+            
+            // Weighing Data Logic
+            const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
 
             // Date & Duration
             const dateStr = cycle.startDate 
@@ -477,10 +505,17 @@ export default function CycleList() {
 
             // Red background for low rating (< 3)
             const isLowQuality = (cycle.qualityRating || 0) > 0 && (cycle.qualityRating || 0) < 3;
+            
+            // СЫРОЕ дерево - самый яркий красный фон
+            const isWet = cycle.isFailed === true;
 
             return (
               <div key={cycle.id} className={`rounded-xl border shadow-sm overflow-hidden transition-all ${
-                  isLowQuality ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:border-amber-200'
+                  isWet 
+                    ? 'bg-red-100 border-red-400 ring-2 ring-red-300' 
+                    : isLowQuality 
+                      ? 'bg-red-50 border-red-200' 
+                      : 'bg-white border-gray-200 hover:border-amber-200'
               }`}>
                 {/* Card Header / Main Row */}
                 <Link to={`/cycle/${cycle.id}`} className="block p-3">
@@ -499,6 +534,12 @@ export default function CycleList() {
                                {cycle.isTest && (
                                    <span className="bg-red-100 text-red-600 border border-red-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
                                        TEST
+                                   </span>
+                               )}
+                               {cycle.isFailed && (
+                                   <span className="bg-blue-100 text-blue-700 border-2 border-blue-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                       <Droplets className="w-3 h-3" />
+                                       {t('wet')}
                                    </span>
                                )}
                            </div>
@@ -556,6 +597,14 @@ export default function CycleList() {
                                    <X className="w-2 h-2 -ml-1" />
                                </div>
                            )}
+                           
+                           {/* Weighing Data Badge */}
+                           {hasWeighingData && (
+                               <div className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+                                   <Scale className="w-3 h-3" />
+                                   {cycle.weighingHistory.length}
+                               </div>
+                           )}
                        </div>
                    </div>
                 </Link>
@@ -603,6 +652,20 @@ export default function CycleList() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {/* WET/DRY Toggle Button */}
+                        <button
+                          onClick={(e) => handleToggleFailed(e, cycle.id || '', cycle.isFailed || false)}
+                          className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-full transition-all border shadow-sm active:scale-95 ${
+                            isWet
+                              ? 'bg-red-500 text-white border-red-600 hover:bg-red-600'
+                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
+                          }`}
+                          title={isWet ? t('markAsSuccess') : t('markAsWet')}
+                        >
+                          <Droplets className={`w-3.5 h-3.5 ${isWet ? '' : 'opacity-50'}`} />
+                          {isWet && <span>{t('wet')}</span>}
+                        </button>
+                        
                         {/* Expand Comment Button */}
                         {cycle.overallComment && (
                             <button 

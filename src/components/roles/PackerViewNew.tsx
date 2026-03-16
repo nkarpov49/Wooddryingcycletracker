@@ -24,6 +24,7 @@ export default function PackerViewNew() {
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [woodFilter, setWoodFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadingModal, setLoadingModal] = useState(false);
 
   // Загрузка всех завершённых циклов
   const fetchCycles = async (showIndicator = false) => {
@@ -152,9 +153,24 @@ export default function PackerViewNew() {
     }
   });
 
-  const handleViewDetails = (cycle: DryingCycle) => {
-    setSelectedCycle(cycle);
-    setDetailModalOpen(true);
+  const handleViewDetails = async (cycle: DryingCycle) => {
+    // Загружаем полный цикл с signed URLs для фотографий
+    try {
+      if (!cycle.id) {
+        console.error('Cycle ID is missing');
+        return;
+      }
+      
+      setLoadingModal(true);
+      const fullCycle = await api.getCycleById(cycle.id);
+      setSelectedCycle(fullCycle);
+      setDetailModalOpen(true);
+    } catch (error) {
+      console.error('Error loading cycle details:', error);
+      toast.error(t('error'));
+    } finally {
+      setLoadingModal(false);
+    }
   };
 
   const handleCycleUpdate = (updatedCycle: DryingCycle) => {
@@ -297,6 +313,16 @@ export default function PackerViewNew() {
           onUpdate={handleCycleUpdate}
           allowEdit={true}
         />
+      )}
+      
+      {/* Loading indicator for modal */}
+      {loadingModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+            <p className="text-gray-600 font-medium">{t('loading')}</p>
+          </div>
+        </div>
       )}
     </div>
   );

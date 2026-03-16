@@ -56,17 +56,38 @@ function AdminRoute({ Component }: { Component: React.ComponentType }) {
     );
 }
 
+// Create wrapper components for each admin route
+function NewCycleRoute() {
+    return <AdminRoute Component={CycleForm} />;
+}
+
+function CycleDetailRoute() {
+    return <AdminRoute Component={CycleDetail} />;
+}
+
+function EditCycleRoute() {
+    return <AdminRoute Component={CycleForm} />;
+}
+
+function WoodTypeSettingsRoute() {
+    return <AdminRoute Component={WoodTypeSettings} />;
+}
+
+function PasswordSettingsRoute() {
+    return <AdminRoute Component={PasswordSettings} />;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
     Component: RootLayout,
     children: [
       { index: true, Component: MainRoute },
-      { path: "new", Component: () => <AdminRoute Component={CycleForm} /> },
-      { path: "cycle/:id", Component: () => <AdminRoute Component={CycleDetail} /> },
-      { path: "edit/:id", Component: () => <AdminRoute Component={CycleForm} /> },
-      { path: "wood-type-settings", Component: () => <AdminRoute Component={WoodTypeSettings} /> },
-      { path: "password-settings", Component: () => <AdminRoute Component={PasswordSettings} /> },
+      { path: "new", Component: NewCycleRoute },
+      { path: "cycle/:id", Component: CycleDetailRoute },
+      { path: "edit/:id", Component: EditCycleRoute },
+      { path: "wood-type-settings", Component: WoodTypeSettingsRoute },
+      { path: "password-settings", Component: PasswordSettingsRoute },
       { path: "*", Component: MainRoute } // Fallback
     ],
   },

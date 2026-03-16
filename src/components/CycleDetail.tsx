@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router';
 import { api, DryingCycle, WeighingRecord } from '../utils/api';
-import { ArrowLeft, Star, Edit, Trash2, CheckCircle, Droplets, TrendingUp, Calendar, X, Sun, Moon, ArrowDown, ArrowUp, CloudSun, Clock, Scale } from 'lucide-react';
+import { ArrowLeft, Star, Edit, Trash2, CheckCircle, Droplets, TrendingUp, Calendar, X, Sun, Moon, ArrowDown, ArrowUp, CloudSun, Clock, Scale, AlertTriangle, Check } from 'lucide-react';
 import { format, differenceInHours } from 'date-fns';
 import { toast } from 'sonner@2.0.3';
 import { useLanguage } from "../utils/i18n";
@@ -9,6 +9,7 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAuth } from '../contexts/AuthContext';
 import WeightProgressChart from './WeightProgressChart';
 import AdvancedPhotoGallery from './AdvancedPhotoGallery';
+import PhotoZoomViewer from './PhotoZoomViewer';
 
 export default function CycleDetail() {
   const { id } = useParams();
@@ -73,6 +74,21 @@ export default function CycleDetail() {
       toast.error(t('error'));
     }
   };
+  
+  const handleToggleFailedStatus = async () => {
+    if (!id || !cycle) return;
+    const newStatus = !cycle.isFailed;
+    
+    try {
+      await api.markCycleAsFailed(id, newStatus);
+      toast.success(newStatus ? t('markAsFailed') : t('markAsSuccess'));
+      // Update local state
+      setCycle({ ...cycle, isFailed: newStatus });
+    } catch (err) {
+      console.error('Error toggling failed status:', err);
+      toast.error(t('error'));
+    }
+  };
 
   if (loading) return <div className="p-8 text-center">{t('loading')}</div>;
   if (!cycle) return null;
@@ -112,6 +128,31 @@ export default function CycleDetail() {
       {/* Header Actions (Back button handled by Global Layout) */}
       <div className="flex items-center justify-end mb-4">
         <div className="flex gap-2">
+          {/* Mark as Failed/Wet Button - только для лидеров и админов */}
+          {(role === 'packer' || role === 'admin') && (
+            <button
+              onClick={handleToggleFailedStatus}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full font-semibold text-sm transition-all border ${
+                cycle.isFailed
+                  ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+              }`}
+              title={cycle.isFailed ? t('markAsSuccess') : t('markAsFailed')}
+            >
+              {cycle.isFailed ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>{t('markAsSuccess')}</span>
+                </>
+              ) : (
+                <>
+                  <Droplets className="w-4 h-4" />
+                  <span>{t('wet')}</span>
+                </>
+              )}
+            </button>
+          )}
+          
           <Link 
             to={`/edit/${id}`}
             className="p-2 text-blue-600 hover:bg-blue-50 rounded-full border border-transparent hover:border-blue-100 transition-colors"
@@ -145,6 +186,12 @@ export default function CycleDetail() {
                    <h1 className="text-2xl font-bold text-gray-900">№{cycle.chamberNumber}</h1>
                    {cycle.isTest && (
                       <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-bold border border-red-200">TEST</span>
+                   )}
+                   {cycle.isFailed && (
+                      <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-bold border-2 border-blue-300 flex items-center gap-1 shadow-sm">
+                        <Droplets className="w-4 h-4" />
+                        {t('wet')}
+                      </span>
                    )}
                  </div>
                 <p className="text-gray-600 font-medium">{cycle.woodType}</p>
@@ -341,7 +388,7 @@ export default function CycleDetail() {
                       <div className="mb-3">
                         <div className="text-xs font-semibold text-foreground/70 mb-2 flex items-center gap-1.5">
                           <span>📦</span> 
-                          <span>Вес ящиков</span>
+                          <span>{t('boxWeights')}</span>
                         </div>
                         <div className="grid grid-cols-4 gap-2">
                           {record.weights.map((weight, i) => {
@@ -377,14 +424,31 @@ export default function CycleDetail() {
                       </div>
                       
                       {/* Recommendation */}
-                      <div className={`rounded-xl p-3 border-2 backdrop-blur-sm shadow-apple-sm ${
-                        record.recommendation.includes('Готово') || record.recommendation.includes('забрать')
-                          ? 'bg-success/10 border-success/30 text-success'
-                          : 'bg-warning/10 border-warning/30 text-warning'
-                      }`}>
-                        <div className="text-xs font-semibold mb-1 opacity-80">💡 Рекомендация</div>
-                        <div className="font-semibold text-sm">{record.recommendation}</div>
-                      </div>
+                      {record.recommendationData ? (
+                        <div className={`rounded-xl p-3 border-2 backdrop-blur-sm shadow-apple-sm ${
+                          record.recommendationData.type === 'approved'
+                            ? 'bg-success/10 border-success/30 text-success'
+                            : 'bg-warning/10 border-warning/30 text-warning'
+                        }`}>
+                          <div className="text-xs font-semibold mb-1 opacity-80">💡 {t('recommendation')}</div>
+                          <div className="font-semibold text-sm">
+                            {record.recommendationData.type === 'approved' 
+                              ? t('readyToCollect')
+                              : `${t('continueDrying')} +${record.recommendationData.hoursNeeded} ${t('hoursShort')} (${t('until')} ${record.recommendationData.endTime})`
+                            }
+                          </div>
+                        </div>
+                      ) : record.recommendation ? (
+                        // Fallback для старых записей с текстовой рекомендацией
+                        <div className={`rounded-xl p-3 border-2 backdrop-blur-sm shadow-apple-sm ${
+                          record.recommendation.includes(t('ready')) || record.recommendation.includes(t('collectWood')) || record.recommendation.includes(t('readyToCollect'))
+                            ? 'bg-success/10 border-success/30 text-success'
+                            : 'bg-warning/10 border-warning/30 text-warning'
+                        }`}>
+                          <div className="text-xs font-semibold mb-1 opacity-80">💡 {t('recommendation')}</div>
+                          <div className="font-semibold text-sm">{record.recommendation}</div>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>

@@ -40,7 +40,7 @@ const WOOD_TYPE_MAPPING: Record<string, string> = {
 
 // Функция для получения конфигурации породы дерева
 const getWoodConfig = (woodType: string, configs: WoodTypeConfig[]): WoodTypeConfig | undefined => {
-  // Сначала ищем напрямую (по английскому названию из цикла)
+  // Сначала ищем напрмую (по английскому названию из цикла)
   let config = configs.find(c => c.name === woodType);
   
   // Если не нашли, пробуем найти через маппинг (ключ литовский -> английское значение)
@@ -84,6 +84,9 @@ export default function DriverView() {
   // Долгое нажатие для выхода
   const [holdTimer, setHoldTimer] = useState<NodeJS.Timeout | null>(null);
   const [holdProgress, setHoldProgress] = useState(0);
+  
+  // Защита от двойного клика при подтверждении
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Chambers 1-21
   const chambers = Array.from({ length: 21 }, (_, i) => i + 1);
@@ -257,9 +260,14 @@ export default function DriverView() {
   };
 
   const handleConfirm = async () => {
+    // Защита от двойного клика
+    if (isSubmitting) return;
+    
     const result = calculateResult();
     if (!result || !selectedChamber) return;
 
+    setIsSubmitting(true);
+    
     try {
       // Получаем текущий цикл с полными данными
       const cycleResponse = await fetch(
@@ -293,13 +301,14 @@ export default function DriverView() {
       
       const totalWeight = weightsArray.reduce((sum, w) => sum + w, 0);
       
-      // Формируем рекомендацию
-      let recommendation = '';
-      if (result.approved) {
-        recommendation = 'Готово, забрать дерево';
-      } else {
-        recommendation = `Продолжить сушку +${result.hoursNeeded} часов (до ${result.endTime})`;
-      }
+      // Сохраняем структурированные данные для рекомендации
+      const recommendationData = result.approved 
+        ? { type: 'approved' as const }
+        : { 
+            type: 'continue' as const, 
+            hoursNeeded: result.hoursNeeded, 
+            endTime: result.endTime 
+          };
       
       // Получаем текущий weightLimit из конфига
       const config = getWoodConfig(selectedChamber.woodType, woodConfigs);
@@ -312,7 +321,7 @@ export default function DriverView() {
         hoursSinceLastCheck,
         weights: weightsArray,
         totalWeight: parseFloat(totalWeight.toFixed(2)),
-        recommendation,
+        recommendationData, // Сохраняем структурированные данные
         driverName: 'Водитель', // Можно добавить имя водителя из контекста
         weightLimit: weightLimit // Сохраняем целевой вес для этого взвешивания
       };
@@ -347,6 +356,8 @@ export default function DriverView() {
     } catch (error) {
       console.error('Error saving result:', error);
       toast.error(t('error'));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -446,24 +457,32 @@ export default function DriverView() {
 
             <button
               onClick={handleConfirm}
-              className="mt-6 w-full bg-white text-gray-900 font-bold text-xl py-4 rounded-xl hover:bg-gray-100 transition-colors"
+              disabled={isSubmitting}
+              className="mt-6 w-full bg-white text-gray-900 font-bold text-xl py-4 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {t('confirmResult')}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <span>{t('loading')}</span>
+                </>
+              ) : (
+                t('confirmResult')
+              )}
             </button>
           </div>
         )}
 
         {/* Сетка ящиков с кнопками + */}
         {!showResult && (
-          <div className="p-4">
-            {/* Сетка 2x2 */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="p-4 max-w-xl mx-auto">
+            {/* Сетка 2x2 - меньше на больших экранах */}
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
               {weights.map((weight, index) => (
                 <button
                   key={index}
                   onClick={() => openCalculator(index)}
                   className={`
-                    aspect-square rounded-2xl border-4 flex flex-col items-center justify-center gap-3 transition-all shadow-lg
+                    aspect-square rounded-2xl border-4 flex flex-col items-center justify-center gap-2 sm:gap-3 transition-all shadow-lg
                     ${weight.weight 
                       ? weight.weight <= weightLimit
                         ? 'bg-green-50 border-green-500 hover:bg-green-100 active:scale-95'
@@ -474,9 +493,7 @@ export default function DriverView() {
                 >
                   {weight.weight ? (
                     <>
-                      <div className={`text-4xl font-black ${
-                        weight.weight <= weightLimit ? 'text-green-600' : 'text-red-600'
-                      }`}>
+                      <div className={`text-3xl sm:text-4xl font-black ${weight.weight <= weightLimit ? 'text-green-600' : 'text-red-600'}`}>
                         {weight.weight}т
                       </div>
                       {weight.weight > weightLimit && (
@@ -486,7 +503,7 @@ export default function DriverView() {
                       )}
                     </>
                   ) : (
-                    <div className="text-6xl text-gray-400 font-light">+</div>
+                    <div className="text-5xl sm:text-6xl text-gray-400 font-light">+</div>
                   )}
                 </button>
               ))}

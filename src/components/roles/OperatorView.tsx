@@ -51,14 +51,24 @@ export default function OperatorView() {
     
     // Load existing photos for this chamber
     const cycle = cycles.find(c => c.chamberNumber === chamberId);
-    if (cycle && cycle.recipePhotos && cycle.recipePhotos.length > 0) {
-      // Server already provides signed URLs in the 'url' field
-      const photos = cycle.recipePhotos.map((p: any) => ({
-        path: p.path,
-        url: p.url,  // Use signed URL from server
-        caption: p.caption
-      }));
-      setExistingPhotos(photos);
+    if (cycle && cycle.id) {
+      try {
+        // Загружаем полный цикл с signed URLs для фотографий
+        const fullCycle = await api.getCycleById(cycle.id);
+        if (fullCycle.recipePhotos && fullCycle.recipePhotos.length > 0) {
+          const photos = fullCycle.recipePhotos.map((p: any) => ({
+            path: p.path,
+            url: p.url,  // Use signed URL from server
+            caption: p.caption
+          }));
+          setExistingPhotos(photos);
+        } else {
+          setExistingPhotos([]);
+        }
+      } catch (error) {
+        console.error('Error loading cycle photos:', error);
+        setExistingPhotos([]);
+      }
     } else {
       setExistingPhotos([]);
     }

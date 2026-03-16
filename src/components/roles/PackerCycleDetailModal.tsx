@@ -5,6 +5,7 @@ import { format, parseISO, differenceInHours } from 'date-fns';
 import { X, Calendar, Droplets, Star, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight, Save, Camera, Upload, Trash2, Plus } from 'lucide-react';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
+import PhotoZoomViewer from '../PhotoZoomViewer';
 
 interface PackerCycleDetailModalProps {
   cycle: DryingCycle;
@@ -135,54 +136,17 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
 
   // Lightbox
   if (lightboxOpen && currentPhotos.length > 0) {
-    const currentPhoto = currentPhotos[currentPhotoIndex];
+    const photosForZoomViewer = currentPhotos.map((p, idx) => ({
+      url: p.url || '',
+      caption: p.caption || (currentPhotoType === 'recipe' ? `${t('recipePhoto')} ${idx + 1}` : `${t('resultPhoto')} ${idx + 1}`)
+    }));
     
     return (
-      <div className="fixed inset-0 bg-black z-50 flex flex-col animate-in fade-in duration-200">
-        <div className="flex justify-between items-center p-4 bg-black/50 backdrop-blur-sm">
-          <button 
-            onClick={() => setLightboxOpen(false)}
-            className="p-2 text-white hover:bg-white/10 rounded-full transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <div className="text-white text-sm font-medium">
-            {currentPhotoIndex + 1} / {currentPhotos.length}
-          </div>
-          <div className="w-10"></div>
-        </div>
-
-        <div className="flex-1 relative flex items-center justify-center p-4">
-          <img 
-            src={currentPhoto.url} 
-            alt={currentPhoto.caption || 'Photo'} 
-            className="max-w-full max-h-full object-contain"
-          />
-
-          {currentPhotos.length > 1 && (
-            <>
-              <button 
-                onClick={prevPhoto}
-                className="absolute left-4 p-3 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
-              >
-                <ChevronLeft className="w-8 h-8" />
-              </button>
-              <button 
-                onClick={nextPhoto}
-                className="absolute right-4 p-3 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
-              >
-                <ChevronRight className="w-8 h-8" />
-              </button>
-            </>
-          )}
-        </div>
-
-        {currentPhoto.caption && (
-          <div className="p-4 bg-black/50 backdrop-blur-sm text-white text-center">
-            {currentPhoto.caption}
-          </div>
-        )}
-      </div>
+      <PhotoZoomViewer 
+        photos={photosForZoomViewer}
+        initialIndex={currentPhotoIndex}
+        onClose={() => setLightboxOpen(false)}
+      />
     );
   }
 

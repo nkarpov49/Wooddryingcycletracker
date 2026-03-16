@@ -61,7 +61,7 @@ const translations: Translations = {
   sortNewest: { ru: "Сорт: Новые", lt: "Rikiuoti: Naujausi" },
   settings: { ru: "Настройки", lt: "Nustatymai" },
   endDate: { ru: "Дата завершения", lt: "Pabaigos data" },
-  duration: { ru: "Длителность", lt: "Trukmė" },
+  duration: { ru: "Длите��ность", lt: "Trukmė" },
   testMode: { ru: "Тестовый режим", lt: "Testinis režimas" },
   test: { ru: "ТЕСТ", lt: "TEST" },
   hoursShort: { ru: "ч", lt: "val" },
@@ -99,7 +99,7 @@ const translations: Translations = {
   existingPhotos: { ru: "Существующие фото", lt: "Esamos nuotraukos" },
   newPhotos: { ru: "Новые фото", lt: "Naujos nuotraukos" },
   photoAddedFromClipboard: { ru: "Фото добавлено из буфера обмена! 📋✨", lt: "Nuotrauka pridėta iš mainų srities! 📋✨" },
-  pasteHint: { ru: "Нажмите Ctrl+V для вставки скриншота", lt: "Paspauskite Ctrl+V nuotraukos įkėlimui" },
+  pasteHint: { ru: "Нажмите Ctrl+V для ставки скриншота", lt: "Paspauskite Ctrl+V nuotraukos įkėlimui" },
   keyboardReminder: { ru: "Напоминание о клавишах", lt: "Klavišų priminimas" },
   tipLabel: { ru: "Совет", lt: "Patarimas" },
   logout: { ru: "Выход", lt: "Atsijungti" },
@@ -151,7 +151,7 @@ const translations: Translations = {
   startWeighing: { ru: "Начать взвешивание", lt: "Pradėti svėrimą" },
   calculate: { ru: "Рассчитать", lt: "Apskaičiuoti" },
   // Weight Progress Chart
-  weightProgressChart: { ru: "График снижения веса", lt: "Svorio mažėjimo grafikas" },
+  weightProgressChart: { ru: "График снижния веса", lt: "Svorio mažėjimo grafikas" },
   weightDynamics: { ru: "Динамика сушки по времени", lt: "Džiovinimo dinamika laike" },
   weightReduction: { ru: "Снижение веса", lt: "Svorio mažėjimas" },
   targetWeight: { ru: "Целевой вес", lt: "Tikslo svoris" },
@@ -181,6 +181,20 @@ const translations: Translations = {
   recommendation: { ru: "Рекомендация", lt: "Rekomendacija" },
   ready: { ru: "Готово", lt: "Paruošta" },
   collectWood: { ru: "Забрать дерево", lt: "Paimti medieną" },
+  readyToCollect: { ru: "Готово, забрать дерево", lt: "Paruošta, paimti medieną" },
+  continueDrying: { ru: "Продолжить сушку", lt: "Tęsti džiovinimą" },
+  until: { ru: "до", lt: "iki" },
+  // Failed cycles
+  wet: { ru: "СЫРОЕ", lt: "ŠLAPIAS" },
+  markAsFailed: { ru: "Отметить как неудачный", lt: "Pažymėti kaip nesėkmingą" },
+  markAsSuccess: { ru: "Отметить как успешный", lt: "Pažymėti kaip sėkmingą" },
+  markedAsWet: { ru: "Помечено как СЫРОЕ", lt: "Pažymėta kaip ŠLAPIAS" },
+  markedAsSuccess: { ru: "Помечено как успешный", lt: "Pažymėta kaip sėkmingas" },
+  markAsWet: { ru: "Отметить как СЫРОЕ", lt: "Pažymėti kaip ŠLAPIAS" },
+  failedCycle: { ru: "Неудачный цикл", lt: "Nesėkmingas ciklas" },
+  searchByChamber: { ru: "Поиск по камере", lt: "Ieškoti pagal džiovyklą" },
+  searchBySeqNumber: { ru: "Поиск по номеру сушки", lt: "Ieškoti pagal džiovinimo numerį" },
+  viewRecipe: { ru: "Просмотр рецепта", lt: "Peržiūrėti receptą" },
 };
 
 type LanguageContextType = {

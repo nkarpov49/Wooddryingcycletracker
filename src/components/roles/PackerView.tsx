@@ -269,15 +269,29 @@ export default function PackerView() {
           {/* Search */}
           <div className="px-4 pb-3">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input 
                     type="text" 
-                    placeholder={lang === 'ru' ? 'ID (3+) или Камера (1-2)...' : 'ID (3+) arba Kamera (1-2)...'}
+                    placeholder={lang === 'ru' ? 'Поиск: 3+ цифры - № сушки, 1-2 цифры - № камеры' : 'Ieška: 3+ skaitm. - Nr. džiov., 1-2 skaitm. - Kameros nr.'}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-gray-100 border-transparent focus:bg-white focus:border-amber-500 focus:ring-0 rounded-lg text-sm"
+                    className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-200 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 rounded-xl text-base font-medium placeholder:text-gray-400 placeholder:text-sm shadow-sm transition-all"
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
+              {/* Hint */}
+              <p className="text-xs text-gray-500 mt-1.5 pl-1">
+                {lang === 'ru' 
+                  ? '💡 Введите 1-2 цифры для поиска по камере, 3+ для поиска по номеру сушки'
+                  : '💡 Įveskite 1-2 skaitmenis kamerai, 3+ džiovinimo numeriui'}
+              </p>
           </div>
 
           {/* Legend & Instructions */}
