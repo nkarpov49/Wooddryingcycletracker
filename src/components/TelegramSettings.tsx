@@ -107,83 +107,6 @@ export default function TelegramSettings() {
         <Send className="w-8 h-8 text-blue-600" />
       </div>
 
-      {/* Инструкция */}
-      <div className="glass rounded-2xl border border-blue-200 p-6 bg-blue-50">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-          <div className="space-y-2 text-sm text-gray-700">
-            <p className="font-bold text-blue-900">
-              {lang === 'ru' ? '📋 Инструкция по настройке:' : '📋 Nustatymo instrukcija:'}
-            </p>
-            <ol className="list-decimal list-inside space-y-2 ml-2">
-              <li className="font-semibold text-blue-800">
-                {lang === 'ru' 
-                  ? 'Создайте бота:' 
-                  : 'Sukurkite botą:'}
-                <ul className="list-disc list-inside ml-4 mt-1 font-normal text-gray-700">
-                  <li>{lang === 'ru' ? 'Откройте Telegram и найдите @BotFather' : 'Atidarykite Telegram ir raskite @BotFather'}</li>
-                  <li>{lang === 'ru' ? 'Отправьте команду /newbot' : 'Išsiųskite komandą /newbot'}</li>
-                  <li>{lang === 'ru' ? 'Придумайте название и username для бота' : 'Sugalvokite pavadinimą ir username botui'}</li>
-                  <li>{lang === 'ru' ? 'Скопируйте токен (длинная строка с цифрами и буквами)' : 'Nukopijuokite tokeną (ilga eilutė su skaičiais ir raidėmis)'}</li>
-                </ul>
-              </li>
-              
-              <li className="font-semibold text-blue-800">
-                {lang === 'ru' 
-                  ? '⚠️ ВАЖНО - Активируйте бота:' 
-                  : '⚠️ SVARBU - Aktyvuokite botą:'}
-                <ul className="list-disc list-inside ml-4 mt-1 font-normal text-gray-700">
-                  <li className="font-bold text-red-600">
-                    {lang === 'ru' 
-                      ? 'Найдите вашего бота в Telegram по username' 
-                      : 'Raskite savo botą Telegram pagal username'}
-                  </li>
-                  <li className="font-bold text-red-600">
-                    {lang === 'ru' 
-                      ? 'Обязательно нажмите СТАРТ или отправьте /start' 
-                      : 'Būtinai paspauskite STARTAS arba siųskite /start'}
-                  </li>
-                  <li>
-                    {lang === 'ru' 
-                      ? 'Бе этого шага бот не сможет отправлять сообщения!' 
-                      : 'Be šio žingsnio botas negalės siųsti pranešimų!'}
-                  </li>
-                </ul>
-              </li>
-              
-              <li className="font-semibold text-blue-800">
-                {lang === 'ru' 
-                  ? 'Получите Chat ID:' 
-                  : 'Gaukite Chat ID:'}
-                <ul className="list-disc list-inside ml-4 mt-1 font-normal text-gray-700">
-                  <li>{lang === 'ru' ? 'Найдите бота @userinfobot' : 'Raskite botą @userinfobot'}</li>
-                  <li>{lang === 'ru' ? 'Отправьте ему /start' : 'Išsiųskite jam /start'}</li>
-                  <li>{lang === 'ru' ? 'Скопируйте ваш ID (просто число, например: 123456789)' : 'Nukopijuokite savo ID (paprastas numeris, pvz.: 123456789)'}</li>
-                </ul>
-              </li>
-              
-              <li className="font-semibold text-blue-800">
-                {lang === 'ru' 
-                  ? 'Вставьте данные в форму ниже и нажмите "Тестировать"' 
-                  : 'Įklijuokite duomenis į formą žemiau ir paspauskite "Testuoti"'}
-              </li>
-            </ol>
-            
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="font-bold text-yellow-900">
-                {lang === 'ru' ? '💡 Альтернатива - Групповой чат:' : '💡 Alternatyva - Grupės pokalbis:'}
-              </p>
-              <ul className="list-disc list-inside ml-2 mt-1 text-yellow-800">
-                <li>{lang === 'ru' ? 'Создайте группу в Telegram' : 'Sukurkite grupę Telegram'}</li>
-                <li>{lang === 'ru' ? 'Добавьте вашего бота в группу' : 'Pridėkite savo botą į grupę'}</li>
-                <li>{lang === 'ru' ? 'Добавьте @userinfobot в эту же группу' : 'Pridėkite @userinfobot į tą pačią grupę'}</li>
-                <li>{lang === 'ru' ? 'Он покажет Chat ID группы (начинается с -100)' : 'Jis parodys grupės Chat ID (prasideda -100)'}</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Настройки */}
       <div className="space-y-4">
         {/* Enable/Disable Toggle */}
@@ -351,7 +274,7 @@ Rezultatas:
 Vidutinis (3 artimi): 11.9t/dėžė ✅
 Iš viso: 47.8t
 
-📊 Vidurkis 3 artimų dėžиų:
+📊 Vidurkis 3 artимų дезиų:
 📉 12.8t → 11.9t (-0.9t per 6.0val)
 ⚡️ Greitis: 0.150t/val
 
