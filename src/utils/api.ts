@@ -85,32 +85,51 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const headers = {
     'Authorization': `Bearer ${publicAnonKey}`,
     'Content-Type': 'application/json',
+    'apikey': publicAnonKey, // Добавляем apikey для Supabase
     ...options.headers,
   };
   
-  console.log(`[API] Запрос к: ${url}`);
-  console.log(`[API] Headers:`, headers);
-  console.log(`[API] Options:`, options);
+  console.log(`[API] 🔄 Запрос к: ${url}`);
   
   try {
-    const response = await fetch(url, { ...options, headers });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 секунд таймаут (увеличено с 15)
     
-    console.log(`[API] Ответ от ${url}:`, response.status, response.statusText);
+    const response = await fetch(url, { 
+      ...options, 
+      headers,
+      signal: controller.signal 
+    });
+    
+    clearTimeout(timeoutId);
+    
+    console.log(`[API] ✅ Ответ от ${url}:`, response.status, response.statusText);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[API] Ошибка ${response.status}:`, errorText);
+      console.error(`[API] ❌ Ошибка ${response.status}:`, errorText);
       throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
     }
     
     const data = await response.json();
-    console.log(`[API] Данные получены от ${url}, количество записей:`, Array.isArray(data) ? data.length : 'не массив');
+    console.log(`[API] 📦 Данные получены от ${url}`);
     return data;
   } catch (error: any) {
-    console.error(`[API] Ошибка запроса к ${url}:`, error);
+    if (error.name === 'AbortError') {
+      console.error(`[API] ⏰ Timeout: Сервер не ответил за 30 секунд`);
+      throw new Error('Сервер не отвечает. Проверьте подключение.');
+    }
+    
+    console.error(`[API] ❌ Ошибка запроса к ${url}:`, error);
     console.error(`[API] Тип ошибки:`, error.name);
     console.error(`[API] Сообщение:`, error.message);
-    console.error(`[API] Stack:`, error.stack);
+    
+    // Если это Failed to fetch, значит сервер недоступен
+    if (error.message === 'Failed to fetch') {
+      console.error(`[API] 🔴 Сервер недоступен. Возможно, Edge Function не запущена.`);
+      console.error(`[API] 💡 Попробуйте перезагрузить страницу или подождите несколько секунд.`);
+    }
+    
     throw error;
   }
 }
@@ -176,6 +195,10 @@ export const api = {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history`, { method: 'DELETE' });
   },
   
+  deleteWeighingRecord: async (id: string, index: number) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history/${index}`, { method: 'DELETE' });
+  },
+  
   // Mark cycle as failed/wet
   markCycleAsFailed: async (id: string, isFailed: boolean) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`, {
@@ -206,5 +229,32 @@ export const api = {
   getCurrentWork: async (): Promise<CurrentWorkCycle[]> => {
     const response = await fetchWithAuth(`${BASE_URL}/sheets/current-work`);
     return response.currentWork || [];
+  },
+  
+  // Telegram Settings
+  getTelegramSettings: async () => {
+    return fetchWithAuth(`${BASE_URL}/telegram-settings`);
+  },
+  
+  saveTelegramSettings: async (settings: { botToken: string; chatId: string; enabled: boolean }) => {
+    return fetchWithAuth(`${BASE_URL}/telegram-settings`, {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+  },
+  
+  testTelegramSettings: async (settings: { botToken: string; chatId: string }) => {
+    return fetchWithAuth(`${BASE_URL}/test-telegram`, {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    });
+  },
+  
+  // Send weighing info to Telegram
+  sendWeighingToTelegram: async (cycleId: string, weighingRecord: WeighingRecord) => {
+    return fetchWithAuth(`${BASE_URL}/send-telegram-weighing`, {
+      method: 'POST',
+      body: JSON.stringify({ cycleId, weighingRecord }),
+    });
   },
 };

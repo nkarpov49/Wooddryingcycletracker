@@ -13,6 +13,7 @@ import CycleDetail from "./components/CycleDetail";
 import AdminLayout from "./components/AdminLayout";
 import WoodTypeSettings from "./components/WoodTypeSettings";
 import PasswordSettings from "./components/PasswordSettings";
+import TelegramSettings from "./components/TelegramSettings";
 
 function RootLayout() {
   return (
@@ -77,6 +78,10 @@ function PasswordSettingsRoute() {
     return <AdminRoute Component={PasswordSettings} />;
 }
 
+function TelegramSettingsRoute() {
+    return <AdminRoute Component={TelegramSettings} />;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -88,6 +93,7 @@ export const router = createBrowserRouter([
       { path: "edit/:id", Component: EditCycleRoute },
       { path: "wood-type-settings", Component: WoodTypeSettingsRoute },
       { path: "password-settings", Component: PasswordSettingsRoute },
+      { path: "telegram-settings", Component: TelegramSettingsRoute },
       { path: "*", Component: MainRoute } // Fallback
     ],
   },

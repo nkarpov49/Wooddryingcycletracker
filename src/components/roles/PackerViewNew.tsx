@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, LogOut, Package, Calendar, Filter, ArrowLeft } from 'lucide-react';
+import { Loader2, LogOut, Package, Calendar, Filter, ArrowLeft, Search, X } from 'lucide-react';
 import { api, DryingCycle, CurrentWorkCycle } from '../../utils/api';
 import { toast } from 'sonner@2.0.3';
 import { format, parseISO } from 'date-fns';
@@ -12,7 +12,7 @@ import CurrentWorkCard from './CurrentWorkCard';
 
 export default function PackerViewNew() {
   const { logout } = useAuth();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [selectedLine, setSelectedLine] = useState<'1-2' | '3' | null>(null);
   const [cycles, setCycles] = useState<DryingCycle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,6 +25,7 @@ export default function PackerViewNew() {
   const [woodFilter, setWoodFilter] = useState<string>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadingModal, setLoadingModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Загрузка всех завершённых циклов
   const fetchCycles = async (showIndicator = false) => {
@@ -115,6 +116,35 @@ export default function PackerViewNew() {
     completedCycles = completedCycles.filter(c => 
       c.woodType?.toLowerCase().includes(woodFilter.toLowerCase())
     );
+  }
+
+  // Apply smart search query filter
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    
+    // Умная логика поиска
+    if (/^\d+$/.test(q)) {
+      // Только цифры
+      if (q.length <= 2) {
+        // 1-2 цифры: поиск по номеру камеры
+        completedCycles = completedCycles.filter(c => 
+          String(c.chamberNumber) === q
+        );
+      } else {
+        // 3+ цифр: поиск по порядковому номеру сушки
+        completedCycles = completedCycles.filter(c => 
+          c.sequentialNumber?.includes(q)
+        );
+      }
+    } else {
+      // Текстовый поиск: порода дерева, комментарии, статус
+      completedCycles = completedCycles.filter(c => 
+        c.woodType?.toLowerCase().includes(q) ||
+        c.overallComment?.toLowerCase().includes(q) ||
+        c.status?.toLowerCase().includes(q) ||
+        (c.isFailed && (q.includes('fail') || q.includes('сыр') || q.includes('šlap')))
+      );
+    }
   }
 
   // Sort by end date (newest first)
@@ -256,6 +286,50 @@ export default function PackerViewNew() {
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Smart Search Bar */}
+          <div className="bg-white rounded-2xl p-4 shadow-apple-sm border border-gray-200">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input 
+                type="text" 
+                placeholder={lang === 'ru' 
+                  ? '🔍 Поиск: 1-2 цифры - камера, 3+ цифр - № сушки, текст - порода' 
+                  : '🔍 Paieška: 1-2 skaitm. - kamera, 3+ - džiov. Nr., tekstas - medis'
+                }
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-12 py-4 bg-gray-50 border-2 border-gray-200 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-200 rounded-xl text-base font-medium placeholder:text-gray-400 placeholder:text-sm shadow-sm transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 bg-white rounded-full p-1 hover:bg-gray-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            
+            {/* Search Hints */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <div className="text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
+                💡 {lang === 'ru' 
+                  ? '1-2 цифры → камера' 
+                  : '1-2 skaitmenys → kamera'}
+              </div>
+              <div className="text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
+                🔢 {lang === 'ru' 
+                  ? '3+ цифр → № сушки' 
+                  : '3+ skaitm. → džiov. Nr.'}
+              </div>
+              <div className="text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200">
+                🌳 {lang === 'ru' 
+                  ? 'Текст → порода' 
+                  : 'Tekstas → medis'}
+              </div>
+            </div>
           </div>
 
           {/* Completed Cycles Section */}

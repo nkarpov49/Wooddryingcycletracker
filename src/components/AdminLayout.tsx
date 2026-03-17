@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router";
-import { Home, ArrowLeft, LogOut, Settings, Lock, TreeDeciduous, ChevronDown } from "lucide-react";
+import { Home, ArrowLeft, LogOut, Settings, Lock, TreeDeciduous, ChevronDown, Send } from "lucide-react";
 import { useLanguage } from "../utils/i18n";
 import { useAuth } from "../contexts/AuthContext";
 import logo from 'figma:asset/32d9f34f23a4ec0005a03e8d2748df656ba8dfab.png';
@@ -11,6 +11,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isHome = location.pathname === "/";
   const isSettings = location.pathname === "/wood-type-settings";
   const isPasswordSettings = location.pathname === "/password-settings";
+  const isTelegramSettings = location.pathname === "/telegram-settings";
   const { lang, setLang, t } = useLanguage();
   const { logout } = useAuth();
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
@@ -48,7 +49,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <button
                 onClick={() => setSettingsMenuOpen(!settingsMenuOpen)}
                 className={`p-2 rounded-full flex items-center gap-1 ${
-                  isSettings || isPasswordSettings 
+                  isSettings || isPasswordSettings || isTelegramSettings
                     ? 'bg-blue-100 text-blue-800' 
                     : 'text-gray-500 hover:bg-gray-100'
                 }`}
@@ -100,6 +101,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         </div>
                         <div className="text-xs text-gray-500">
                           {lang === 'ru' ? 'Управление доступом' : 'Prieigos valdymas'}
+                        </div>
+                      </div>
+                    </Link>
+                    
+                    <Link
+                      to="/telegram-settings"
+                      onClick={() => setSettingsMenuOpen(false)}
+                      className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 ${
+                        isTelegramSettings ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                      }`}
+                    >
+                      <Send className="w-5 h-5" />
+                      <div>
+                        <div className="font-medium">
+                          {lang === 'ru' ? 'Telegram' : 'Telegram'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {lang === 'ru' ? 'Настройки уведомлений' : 'Pranešimų nustatymai'}
                         </div>
                       </div>
                     </Link>

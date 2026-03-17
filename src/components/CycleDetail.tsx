@@ -7,7 +7,6 @@ import { toast } from 'sonner@2.0.3';
 import { useLanguage } from "../utils/i18n";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAuth } from '../contexts/AuthContext';
-import WeightProgressChart from './WeightProgressChart';
 import AdvancedPhotoGallery from './AdvancedPhotoGallery';
 import PhotoZoomViewer from './PhotoZoomViewer';
 
@@ -86,6 +85,33 @@ export default function CycleDetail() {
       setCycle({ ...cycle, isFailed: newStatus });
     } catch (err) {
       console.error('Error toggling failed status:', err);
+      toast.error(t('error'));
+    }
+  };
+
+  const handleDeleteWeighingRecord = async (index: number) => {
+    if (!id || !cycle) return;
+    
+    console.log(`[CycleDetail] Удаление записи взвешивания. Цикл: ${id}, Индекс: ${index}`);
+    console.log(`[CycleDetail] Всего записей: ${cycle.weighingHistory?.length || 0}`);
+    
+    const record = cycle.weighingHistory?.[index];
+    if (!record) {
+      console.error(`[CycleDetail] Запись с индексом ${index} не найдена`);
+      toast.error(t('recordNotFound'));
+      return;
+    }
+    
+    console.log(`[CycleDetail] Удаляем запись:`, new Date(record.timestamp).toISOString());
+    
+    try {
+      const result = await api.deleteWeighingRecord(id, index);
+      console.log(`[CycleDetail] ✅ Запись успешно удалена:`, result);
+      toast.success(t('recordDeleted'));
+      // Перезагружаем цикл для обновления данных
+      await loadCycle(id);
+    } catch (err) {
+      console.error('[CycleDetail] ❌ Ошибка удаления записи:', err);
       toast.error(t('error'));
     }
   };
@@ -321,12 +347,7 @@ export default function CycleDetail() {
             )}
             
             {/* Weight Progress Chart */}
-            {cycle.weighingHistory && cycle.weighingHistory.length > 1 && (
-              <WeightProgressChart 
-                weighingHistory={cycle.weighingHistory}
-                targetWeight={cycle.weighingHistory[cycle.weighingHistory.length - 1]?.weightLimit}
-              />
-            )}
+            {/* Removed - Chart is no longer displayed */}
             
             {/* Weighing History Card */}
             {cycle.weighingHistory && cycle.weighingHistory.length > 0 && (
@@ -360,34 +381,43 @@ export default function CycleDetail() {
                           <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-blue-400 text-white flex items-center justify-center text-sm font-bold shadow-apple-sm">
                             {index + 1}
                           </div>
-                          <div className="text-sm text-muted-foreground font-medium">
-                            {format(new Date(record.timestamp), 'dd.MM.yyyy HH:mm')}
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm text-muted-foreground font-medium">
+                              {format(new Date(record.timestamp), 'dd.MM.yyyy HH:mm')}
+                            </div>
+                            <div className="flex items-center gap-1 text-primary font-bold text-sm">
+                              <Clock className="w-4 h-4" />
+                              <span>{record.hoursFromStart} {t('hoursShort')}</span>
+                            </div>
                           </div>
                         </div>
+                        
+                        {/* Кнопка удаления конкретной записи */}
+                        <button
+                          onClick={() => handleDeleteWeighingRecord(index)}
+                          className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-apple"
+                          title={t('deleteRecord')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                       
-                      {/* Time Info */}
-                      <div className="grid grid-cols-2 gap-3 mb-3">
-                        <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 text-center border border-white/40">
-                          <div className="text-xs text-muted-foreground mb-1 font-medium">{t('fromCycleStart')}</div>
-                          <div className="font-bold text-primary text-base">
-                            {record.hoursFromStart} {t('hoursShort')}
-                          </div>
-                        </div>
-                        {record.hoursSinceLastCheck !== undefined && (
+                      {/* Time Info - только с момента последней проверки */}
+                      {record.hoursSinceLastCheck !== undefined && (
+                        <div className="mb-3">
                           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 text-center border border-white/40">
                             <div className="text-xs text-muted-foreground mb-1 font-medium">{t('sinceLastCheck')}</div>
                             <div className="font-bold text-purple-600 text-base">
                               {record.hoursSinceLastCheck} {t('hoursShort')}
                             </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
                       
                       {/* Weights - с цветовой индикацией */}
                       <div className="mb-3">
                         <div className="text-xs font-semibold text-foreground/70 mb-2 flex items-center gap-1.5">
-                          <span>📦</span> 
+                          <span className="text-xl">📦</span> 
                           <span>{t('boxWeights')}</span>
                         </div>
                         <div className="grid grid-cols-4 gap-2">

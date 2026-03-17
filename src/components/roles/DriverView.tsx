@@ -5,6 +5,7 @@ import { ArrowLeft, Check, X, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { format } from 'date-fns';
+import { api } from '../../utils/api';
 
 type WorkCycle = {
   id: string;
@@ -123,18 +124,42 @@ export default function DriverView() {
 
   const fetchActiveChambers = async () => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/work-cycles`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
+      console.log('[DriverView] 📥 Загрузка активных камер...');
+      const url = `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/work-cycles`;
+      console.log('[DriverView] URL запроса:', url);
+      
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${publicAnonKey}` }
+      });
+      
+      console.log('[DriverView] Статус ответа:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[DriverView] ❌ Ошибка ${response.status}:`, errorText);
+        
+        // Показываем пользователю понятное сообщение
+        if (response.status === 500) {
+          toast.error(lang === 'ru' ? 'Ошибка сервера. Попробуйте позже.' : 'Serverio klaida. Bandykite vėliau.');
+        } else if (response.status === 404) {
+          toast.error(lang === 'ru' ? 'Сервис недоступен' : 'Paslauga nepasiekiama');
+        } else {
+          toast.error(t('error'));
         }
-      );
+        
+        setCycles([]);
+        setLoading(false);
+        return;
+      }
+      
       const data = await response.json();
+      console.log('[DriverView] ✅ Получено циклов:', data?.length || 0);
       
       // Проверяем что data это массив
       if (!Array.isArray(data)) {
-        console.error('Invalid data format from work-cycles API:', data);
+        console.error('[DriverView] ⚠️ Неверный формат данных:', typeof data);
         setCycles([]);
+        setLoading(false);
         return;
       }
       
@@ -142,10 +167,24 @@ export default function DriverView() {
       const inProgressCycles = data.filter((c: WorkCycle) => 
         c.status && (c.status.toLowerCase() === 'in progress' || c.status === 'In Progress')
       );
+      console.log('[DriverView] ✅ Циклы в процессе:', inProgressCycles.length);
       setCycles(inProgressCycles);
-    } catch (error) {
-      console.error('Error fetching chambers:', error);
-      toast.error(t('error'));
+    } catch (error: any) {
+      console.error('[DriverView] ❌ Критическая ошибка загрузки камер:', error);
+      console.error('[DriverView] Тип ошибки:', error.name);
+      console.error('[DriverView] Сообщение:', error.message);
+      
+      // Проверяем тип ошибки
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        toast.error(
+          lang === 'ru' 
+            ? 'Не удалось подключиться к серверу. Проверьте интернет.' 
+            : 'Nepavyko prisijungti prie serverio. Patikrinkite internetą.'
+        );
+      } else {
+        toast.error(t('error'));
+      }
+      
       setCycles([]);
     } finally {
       setLoading(false);
@@ -349,6 +388,15 @@ export default function DriverView() {
           })
         }
       );
+
+      // ✅ Отправляем в Telegram (если настроен)
+      try {
+        await api.sendWeighingToTelegram(selectedChamber.id, newWeighingRecord);
+        console.log('[Telegram] Сообщение отправлено');
+      } catch (telegramError: any) {
+        console.log('[Telegram] Ошибка отправки (возможно не настроен):', telegramError.message);
+        // Не показываем ошибку пользователю, так как это не критично
+      }
 
       toast.success(t('saved'));
       setSelectedChamber(null);

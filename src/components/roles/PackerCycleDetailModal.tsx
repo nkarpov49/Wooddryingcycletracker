@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO, differenceInHours } from 'date-fns';
-import { X, Calendar, Droplets, Star, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight, Save, Camera, Upload, Trash2, Plus } from 'lucide-react';
+import { X, Calendar, Droplets, Star, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight, Save, Camera, Upload, Trash2, Plus, Scale } from 'lucide-react';
 import { api } from '../../utils/api';
 import { toast } from 'sonner';
 import PhotoZoomViewer from '../PhotoZoomViewer';
@@ -235,6 +235,95 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
               </div>
             )}
           </div>
+
+          {/* Weighing History Section */}
+          {cycle.weighingHistory && cycle.weighingHistory.length > 0 && (
+            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-orange-200 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-2 bg-orange-500 rounded-lg">
+                  <Scale className="w-4 h-4 text-white" />
+                </div>
+                <h3 className="text-sm font-bold text-gray-900">
+                  {lang === 'ru' ? 'История взвешивания' : 'Svėrimo istorija'}
+                </h3>
+                <div className="ml-auto bg-orange-100 px-2 py-0.5 rounded-full">
+                  <span className="text-xs font-bold text-orange-700">
+                    {cycle.weighingHistory.length} {lang === 'ru' ? 'раз' : 'kartai'}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                {cycle.weighingHistory.map((record, idx) => {
+                  const isLast = idx === cycle.weighingHistory!.length - 1;
+                  
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`bg-white rounded-xl p-3 border-2 ${isLast ? 'border-green-300' : 'border-orange-200'} shadow-sm`}
+                    >
+                      {/* Header with timestamp */}
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                            isLast ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'
+                          }`}>
+                            {idx + 1}
+                          </div>
+                          <span className="text-xs text-gray-600">
+                            {format(parseISO(record.timestamp), 'dd.MM HH:mm')}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 font-medium">
+                          {record.hoursFromStart}ч {lang === 'ru' ? 'от старта' : 'nuo starto'}
+                        </div>
+                      </div>
+                      
+                      {/* Individual box weights */}
+                      {record.weights && record.weights.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {record.weights.map((w, wIdx) => (
+                            <div 
+                              key={wIdx}
+                              className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-700"
+                            >
+                              {w.toFixed(2)}т
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Recommendation */}
+                      {(record.recommendation || record.recommendationData) && (
+                        <div className={`mt-2 p-2 rounded-lg ${
+                          record.recommendationData?.type === 'approved' 
+                            ? 'bg-green-100 border border-green-200' 
+                            : 'bg-blue-100 border border-blue-200'
+                        }`}>
+                          <div className="text-xs font-bold text-gray-800">
+                            {record.recommendationData?.type === 'approved' 
+                              ? `✅ ${lang === 'ru' ? 'Одобрено' : 'Patvirtinta'}`
+                              : `⏰ ${lang === 'ru' ? 'Продолжить' : 'Tęsti'}`
+                            }
+                            {record.recommendationData?.hoursNeeded && (
+                              <span className="ml-1">
+                                (+{record.recommendationData.hoursNeeded}ч)
+                              </span>
+                            )}
+                          </div>
+                          {record.recommendation && (
+                            <div className="text-xs text-gray-700 mt-1">
+                              {record.recommendation}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Recipe Photos */}
           {allRecipePhotos.length > 0 && (

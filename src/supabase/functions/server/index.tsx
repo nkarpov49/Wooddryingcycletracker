@@ -105,17 +105,23 @@ routes.get('/health', (c) => {
 // Там обычно небольшое количество циклов (только завершенные для взвешивания), поэтому не критично
 routes.get('/work-cycles', async (c) => {
   try {
-    console.log('[WorkCycles] Запрос на получение рабочих циклов');
+    console.log('[WorkCycles] 📥 Запрос на получение рабочих циклов');
     
     const cycles = await kv.getByPrefix("cycle_");
-    console.log(`[WorkCycles] Загружено ${cycles.length} циклов`);
+    console.log(`[WorkCycles] ✅ Загружено ${cycles.length} циклов из БД`);
     
+    if (cycles.length === 0) {
+      console.log('[WorkCycles] ⚠️ Нет циклов в базе данных');
+      return c.json([]);
+    }
+    
+    console.log('[WorkCycles] 🔐 Подписываем URL для фотографий...');
     const signedCycles = await Promise.all(cycles.map(async (cycle: any) => {
       if (!cycle) return null;
       try {
         return await signCycleUrls(cycle);
       } catch (signError: any) {
-        console.error(`[WorkCycles] Ошибка подписания URL для цикла ${cycle.id}:`, signError);
+        console.error(`[WorkCycles] ❌ Ошибка подписания URL для цикла ${cycle.id}:`, signError.message);
         return cycle;
       }
     }));
@@ -123,10 +129,12 @@ routes.get('/work-cycles', async (c) => {
     const validCycles = signedCycles.filter(c => c !== null);
     validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     
+    console.log(`[WorkCycles] ✅ Возвращаем ${validCycles.length} валидных циклов`);
     return c.json(validCycles);
   } catch (error: any) {
-    console.error("[WorkCycles] Ошибка получения циклов:", error);
-    return c.json([]);
+    console.error("[WorkCycles] ❌ Критическая ошибка:", error);
+    console.error("[WorkCycles] Stack trace:", error.stack);
+    return c.json({ error: error.message || "Failed to fetch work cycles" }, 500);
   }
 });
 
@@ -137,7 +145,7 @@ routes.get('/cycles', async (c) => {
     const cycles = await kv.getByPrefix("cycle_");
     console.log(`[Cycles] Загружено ${cycles.length} циклов`);
     
-    // Поддержка фильтрации по sequentialNumber для Google Sheets синхронизации
+    // Поддержка фильтрации по sequentialNumber для Google Sheets синхронизаци
     const sequentialNumber = c.req.query('sequentialNumber');
     let filteredCycles = cycles;
     
@@ -148,7 +156,7 @@ routes.get('/cycles', async (c) => {
       console.log(`[Cycles] Отфильтровано по sequentialNumber ${sequentialNumber}: ${filteredCycles.length} циклов`);
     }
     
-    // ✅ ОПТИМИЗАЦИЯ: Не генерируем signed URLs для списка циклов
+    // ✅ ОПТИМИЗАЦИЯ: Не генерируем signed URLs для списка цикл
     // Фотографии будут загружаться только при открытии конкретного цикла через GET /cycles/:id
     const validCycles = filteredCycles.filter(c => c !== null);
     validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -190,8 +198,8 @@ routes.get('/cycles/:id', async (c) => {
 // ✅ НОВЫЙ ENDPOINT: Удаление истории взвешиваний
 routes.delete('/cycles/:id/weighing-history', async (c) => {
   try {
-    const id = c.req.param("id");
-    console.log(`[Cycle] Запрос на удаление истории взвешиваний для цикла ${id}`);
+    const id = c.req.param('id');
+    console.log(`[Cycle] Удаление истории взвешиваний для цикла ${id}`);
     
     const cycle = await kv.get(`cycle_${id}`);
     if (!cycle) {
@@ -212,6 +220,55 @@ routes.delete('/cycles/:id/weighing-history', async (c) => {
   } catch (error: any) {
     console.error(`[Cycle] Ошибка удаления истории взвешиваний:`, error);
     return c.json({ error: error.message }, 500);
+  }
+});
+
+// Delete specific weighing record from history
+routes.delete('/cycles/:id/weighing-history/:index', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const indexToDelete = parseInt(c.req.param('index'));
+    console.log(`[Cycle] Запрос на удаление записи взвешивания. Цикл: ${id}, Индекс: ${indexToDelete}`);
+    
+    const cycle = await kv.get(`cycle_${id}`);
+    if (!cycle) {
+      console.log(`[Cycle] Цикл ${id} не найден`);
+      return c.json({ error: "Cycle not found" }, 404);
+    }
+    
+    const weighingHistory = cycle.weighingHistory || [];
+    console.log(`[Cycle] Текущая длина истории: ${weighingHistory.length}`);
+    console.log(`[Cycle] Записи в истории:`, weighingHistory.map((w: any, i: number) => `${i}: ${new Date(w.timestamp).toISOString()}`));
+    
+    if (isNaN(indexToDelete)) {
+      console.log(`[Cycle] Индекс не является числом: ${c.req.param('index')}`);
+      return c.json({ error: "Invalid index format" }, 400);
+    }
+    
+    if (indexToDelete < 0 || indexToDelete >= weighingHistory.length) {
+      console.log(`[Cycle] Индекс ${indexToDelete} вне диапазона 0-${weighingHistory.length - 1}`);
+      return c.json({ error: `Invalid index. Must be between 0 and ${weighingHistory.length - 1}` }, 400);
+    }
+    
+    // Удаляем конкретную запись
+    const recordToDelete = weighingHistory[indexToDelete];
+    console.log(`[Cycle] Удаляем запись ${indexToDelete}:`, new Date(recordToDelete.timestamp).toISOString());
+    
+    const updatedHistory = weighingHistory.filter((_: any, idx: number) => idx !== indexToDelete);
+    
+    const updatedCycle = {
+      ...cycle,
+      weighingHistory: updatedHistory
+    };
+    
+    await kv.set(`cycle_${id}`, updatedCycle);
+    console.log(`[Cycle] ✅ Запись взвешивания ${indexToDelete} удалена для цикла ${id}. Осталось записей: ${updatedHistory.length}`);
+    
+    return c.json({ success: true, message: "Weighing record deleted", cycle: updatedCycle });
+  } catch (error: any) {
+    console.error(`[Cycle] ❌ Ошибка удаления записи взвешивания:`, error);
+    console.error(`[Cycle] Stack trace:`, error.stack);
+    return c.json({ error: error.message || "Internal server error" }, 500);
   }
 });
 
@@ -451,7 +508,7 @@ routes.post('/sheets/update-current-work', async (c) => {
     
     return c.json({ 
       success: true, 
-      message: 'Данные о текущих работах обновлены' 
+      message: 'Данные о текущих работах обновлеы' 
     });
     
   } catch (error: any) {
@@ -486,26 +543,49 @@ routes.get('/sheets/current-work', async (c) => {
     
     console.log('[Sheets] Порядковые номера циклов:', sequentialNumbers);
     
-    // Получаем все циклы с обработкой ошибок
-    let allCycles = [];
-    try {
-      allCycles = await kv.getByPrefix('cycle_');
-      console.log(`[Sheets] Загружено ${allCycles.length} циклов из базы`);
-    } catch (cycleError: any) {
-      console.error('[Sheets] Ошибка загрузки циклов:', cycleError);
-      // Продолжаем с пустым массивом циклов
-      allCycles = [];
-    }
+    // ✅ ОПТИМИЗАЦИЯ: Используем прямой запрос к БД вместо загрузки всех циклов
+    let cyclesMap = new Map();
     
-    // Создаём Map для быстрого поиска по sequentialNumber
-    const cyclesMap = new Map();
-    for (const cycle of allCycles) {
-      if (cycle && cycle.sequentialNumber) {
-        cyclesMap.set(cycle.sequentialNumber, cycle);
+    if (sequentialNumbers.length > 0) {
+      try {
+        // Делаем прямой запрос к базе для каждого sequentialNumber
+        for (const seqNum of sequentialNumbers) {
+          console.log(`[Sheets] Поиск цикла с sequentialNumber: ${seqNum}`);
+          
+          const { data: dbData, error } = await supabase
+            .from("kv_store_c5bcdb1f")
+            .select("key, value")
+            .like("key", "cycle_%")
+            .limit(1000); // Ограничиваем для безопасности
+          
+          if (error) {
+            console.error('[Sheets] Ошибка запроса к БД:', error);
+            continue;
+          }
+          
+          // Ищем цикл с нужным sequentialNumber
+          const matchingCycle = dbData?.find((item: any) => {
+            try {
+              return item.value?.sequentialNumber === seqNum;
+            } catch (e) {
+              return false;
+            }
+          });
+          
+          if (matchingCycle) {
+            cyclesMap.set(seqNum, matchingCycle.value);
+            console.log(`[Sheets] Найден цикл для ${seqNum}:`, matchingCycle.value.id);
+          } else {
+            console.log(`[Sheets] Цикл с sequentialNumber ${seqNum} не найден`);
+          }
+        }
+        
+        console.log(`[Sheets] Найдено циклов: ${cyclesMap.size}`);
+      } catch (cycleError: any) {
+        console.error('[Sheets] Ошибка загрузки циклов:', cycleError);
+        // Продолжаем с пустым Map
       }
     }
-    
-    console.log(`[Sheets] Создана карта циклов: ${cyclesMap.size} записей`);
     
     // Формируем результат
     const currentWork = [];
@@ -675,7 +755,7 @@ routes.get('/sheets/row-status/:rowNumber', async (c) => {
   }
 });
 
-// Сброс статуса обработки строки (для повторного тестирования)
+// Сброс татуса обработки строки (для повторного тестирования)
 routes.delete('/sheets/reset-row/:rowNumber', async (c) => {
   try {
     const rowNumber = parseInt(c.req.param('rowNumber'));
@@ -754,12 +834,12 @@ routes.post('/sheets/clear-processed', async (c) => {
   }
 });
 
-// НОВЫЙ: Удалить дубликаты циклов по порядковому номеру (оставить только последний)
+// НОВЫЙ: Удалить дубликаы циклов по порядковому номеру (оставить только последний)
 routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
   try {
     const sequentialNumber = c.req.param('sequentialNumber');
     
-    console.log(`[Sheets] Удаление дубликатов для цикла ${sequentialNumber}`);
+    console.log(`[Sheets] Удаление дубликатов для икла ${sequentialNumber}`);
     
     // Находим все циклы с этим порядковым номером
     const allCycles = await kv.getByPrefix('cycle_');
@@ -776,7 +856,7 @@ routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
       });
     }
     
-    // Оставляем только ПОСЛЕДНИЙ (самый новый), удаляем остальные
+    // Оставляем только ПОСЛЕДНИЙ (самый новый), удаляем осталные
     const toKeep = duplicates[0];
     const toDelete = duplicates.slice(1);
     
@@ -784,7 +864,7 @@ routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
     
     // Удаляем дубликаты (используем правильный ключ cycle_${id})
     for (const item of toDelete) {
-      await kv.del(item.key); // Используем оригинальный ключ из БД
+      await kv.del(item.key); // Используем оригиальный ключ из БД
       console.log(`[Sheets] Удалён дубликат: ${item.cycle.id} (ключ: ${item.key})`);
     }
     
@@ -861,7 +941,7 @@ routes.post('/sheets/sync-progress', async (c) => {
         );
         
         if (activeCycle) {
-          // Обновляем процент (сохраняем с одним знаком после запятой)
+          // Обновляем процент (сохраняем с одним знаком после запятй)
           const roundedProgress = Math.round(progress * 10) / 10;
           activeCycle.progressPercent = roundedProgress;
           await kv.set(`cycle_${activeCycle.id}`, activeCycle);
@@ -907,7 +987,7 @@ routes.post('/analyze-weight', async (c) => {
       return c.json({ error: 'OpenAI API key not configured' }, 500);
     }
 
-    // Отправляем изображение на OpenAI Vision API
+    // Опраляем изображеие на OpenAI Vision API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -1050,22 +1130,6 @@ routes.post('/check-admin-password', async (c) => {
   }
 });
 
-// Получить настройки паролей (только для админа)
-routes.get('/password-settings', async (c) => {
-  try {
-    const appPassword = await kv.get('app_password') || 'drytrack2024';
-    const adminPassword = await kv.get('admin_password') || 'admin2024';
-    
-    return c.json({ 
-      appPassword,
-      adminPassword 
-    });
-  } catch (error: any) {
-    console.error('[PasswordSettings] Ошибка получения настроек паролей:', error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
 // Обновить настройки паролей (только для админа)
 routes.post('/password-settings', async (c) => {
   try {
@@ -1088,9 +1152,327 @@ routes.post('/password-settings', async (c) => {
   }
 });
 
+// Получить настройки Telegram (только для админа)
+routes.get('/telegram-settings', async (c) => {
+  try {
+    const settings = await kv.get('telegram_settings') || {
+      botToken: '',
+      chatId: '',
+      enabled: false
+    };
+    
+    return c.json(settings);
+  } catch (error: any) {
+    console.error('[TelegramSettings] Ошибка получения настроек:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Сохранить настройки Telegram (только для админа)
+routes.post('/telegram-settings', async (c) => {
+  try {
+    const { botToken, chatId, enabled } = await c.req.json();
+    
+    const settings = {
+      botToken: botToken || '',
+      chatId: chatId || '',
+      enabled: enabled || false
+    };
+    
+    await kv.set('telegram_settings', settings);
+    console.log('[TelegramSettings] Настройки Telegram сохранены');
+    
+    return c.json({ success: true });
+  } catch (error: any) {
+    console.error('[TelegramSettings] Ошибка сохранения настроек:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Отправить информацию о взвешивании в Telegram
+routes.post('/send-telegram-weighing', async (c) => {
+  try {
+    const { cycleId, weighingRecord } = await c.req.json();
+    
+    if (!cycleId || !weighingRecord) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+    
+    console.log('[Telegram] Отправка информации о взвешивании для цикла:', cycleId);
+    
+    // Получаем настройки Telegram
+    const settings = await kv.get('telegram_settings');
+    
+    if (!settings || !settings.enabled || !settings.botToken || !settings.chatId) {
+      console.log('[Telegram] Telegram не настроен или отключен');
+      return c.json({ 
+        error: 'Telegram не настроен. Пожалуйста, настройте бота в панели администратора.' 
+      }, 400);
+    }
+    
+    // Получаем информацию о цикле
+    const cycle = await kv.get(`cycle_${cycleId}`);
+    
+    if (!cycle) {
+      return c.json({ error: 'Цикл не найден' }, 404);
+    }
+    
+    // Получаем историю взвешиваний для этого цикла
+    const weighingHistory = cycle.weighingHistory || [];
+    
+    // Находим предыдущее взвешивание (не текущее)
+    const currentTimestamp = weighingRecord.timestamp;
+    const previousWeighing = weighingHistory
+      .filter((w: any) => w.timestamp !== currentTimestamp)
+      .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+    
+    // Формируем красивое сообщение на литовском
+    const { weights, hoursFromStart, recommendation, recommendationData, totalWeight } = weighingRecord;
+    
+    // Конвертируем время в литовский часовой пояс (Europe/Vilnius)
+    const lithuanianTime = new Date(weighingRecord.timestamp).toLocaleString('lt-LT', {
+      timeZone: 'Europe/Vilnius',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    
+    // Функция для выбора 3 наиболее близких по весу ящиков
+    const getClosest3Boxes = (boxes: number[]) => {
+      if (boxes.length <= 3) return boxes;
+      
+      // Сортируем ящики по весу
+      const sorted = [...boxes].sort((a, b) => a - b);
+      
+      // Находим 3 последовательных ящика с минимальной разницей
+      let minDiff = Infinity;
+      let bestStart = 0;
+      
+      for (let i = 0; i <= sorted.length - 3; i++) {
+        const diff = sorted[i + 2] - sorted[i]; // разница между первым и третьим
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestStart = i;
+        }
+      }
+      
+      return [sorted[bestStart], sorted[bestStart + 1], sorted[bestStart + 2]];
+    };
+    
+    // Получаем 3 наиболее близких ящика для текущего взвешивания
+    const closest3Current = getClosest3Boxes(weights);
+    const averageWeight = (closest3Current.reduce((sum, w) => sum + w, 0) / 3).toFixed(2);
+    
+    // Определяем эмодзи для каждой коробки (зеленый/красный)
+    const weightLimit = weighingRecord.weightLimit || 0;
+    const allGood = weights.every((w: number) => w <= weightLimit);
+    const statusEmoji = allGood ? '✅' : '❌';
+    
+    // Формируем компактный список коробок БЕЗ НОМЕРОВ
+    const boxList = weights
+      .map((w: number) => {
+        const emoji = w <= weightLimit ? '✅' : '❌';
+        return `📦 ${w}t ${emoji}`;
+      })
+      .join('\n');
+    
+    // Определяем рекомендацию (упрощенная)
+    let recommendationText = '';
+    
+    if (recommendationData) {
+      if (recommendationData.type === 'approved') {
+        recommendationText = '\n\n✅ GATAVA RINKTI!';
+      } else {
+        recommendationText = `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
+      }
+    }
+    
+    // Вычисляем изменения только если есть предыдущее взвешивание
+    let changeInfo = '';
+    if (previousWeighing) {
+      const previousWeights = previousWeighing.weights || [];
+      const timeDiff = (new Date(weighingRecord.timestamp).getTime() - new Date(previousWeighing.timestamp).getTime()) / (1000 * 60 * 60);
+      
+      // Получаем 3 наиболее близких ящика из предыдущего взвешивания
+      const closest3Previous = getClosest3Boxes(previousWeights);
+      const previousAverage = closest3Previous.reduce((sum, w) => sum + w, 0) / 3;
+      const currentAverage = parseFloat(averageWeight);
+      
+      // Рассчитываем изменение среднего веса
+      const weightLoss = previousAverage - currentAverage;
+      const lossRate = timeDiff > 0 ? (weightLoss / timeDiff) : 0;
+      
+      if (weightLoss > 0) {
+        changeInfo = `\n\n📊 Vidurkis 3 artimų dėžių:\n📉 ${previousAverage.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+      }
+    }
+    
+    // УПРОЩЕННОЕ СООБЩЕНИЕ
+    const message = `📦 <b>SVĖRIMAS | Džiovykla ${cycle.chamberNumber}</b>
+
+📅 ${lithuanianTime}
+⏱ ${hoursFromStart}val nuo pradžios
+🌲 ${cycle.woodType} (#${cycle.sequentialNumber})
+🎯 Tikslas: ${weightLimit}t/dėžė
+
+<b>Rezultatas:</b>
+${boxList}
+
+<b>Vidutinis (3 artimi): ${averageWeight}t/dėžė ${statusEmoji}</b>
+Iš viso: ${totalWeight}t${changeInfo}${recommendationText}`.trim();
+    
+    // Отправляем сообщение в Telegram
+    const telegramUrl = `https://api.telegram.org/bot${settings.botToken}/sendMessage`;
+    
+    const response = await fetch(telegramUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: settings.chatId,
+        text: message,
+        parse_mode: 'HTML'
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Telegram] Ошибка отправки:', errorData);
+      
+      // Формируем понятное сообщение об ошибке
+      let errorMessage = 'Ошибка отправки в Telegram';
+      if (errorData.description?.includes('bot was blocked')) {
+        errorMessage = 'Бот заблокирован пользователем. Разблокируйте бота и попробуйте снова.';
+      } else if (errorData.description?.includes('chat not found')) {
+        errorMessage = 'Чат не найден. Проверьте правильность Chat ID.';
+      } else if (errorData.description?.includes('bots can\'t send messages to bots')) {
+        errorMessage = 'Нельзя отправлять сообщения другим ботам. Укажите Chat ID личного чата или группы.';
+      } else if (errorData.description?.includes('Unauthorized')) {
+        errorMessage = 'Неверный токен бота. Проверьте правильность токена.';
+      }
+      
+      return c.json({ 
+        error: errorMessage, 
+        details: errorData 
+      }, 500);
+    }
+    
+    const result = await response.json();
+    console.log('[Telegram] Сообщение отправлено успешно:', result);
+    
+    return c.json({ 
+      success: true, 
+      message: 'Сообщение отправлено в Telegram',
+      messageId: result.result?.message_id
+    });
+    
+  } catch (error: any) {
+    console.error('[Telegram] Ошибка отправки сообщения:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+// Тестирование настроек Telegram
+routes.post('/test-telegram', async (c) => {
+  try {
+    const { botToken, chatId } = await c.req.json();
+    
+    if (!botToken || !chatId) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+    
+    console.log('[Telegram] Тестовая отправка сообщения');
+    
+    const testMessage = `
+🧪 <b>TEST MESSAGE / TESTINIS PRANEŠIMAS</b>
+
+✅ <b>Telegram bot configured successfully!</b>
+Telegram botas sukonfigūruotas sėkmingai!
+
+DryTrack notification system is ready to use.
+DryTrack pranešimų система paruošta naudojimui.
+
+🔔 You will receive weighing notifications here.
+Čia gausite pranešimus apie svėrimą.
+    `.trim();
+    
+    // Отправляем тестовое сообщение
+    const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    
+    const response = await fetch(telegramUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: testMessage,
+        parse_mode: 'HTML'
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Telegram] Ошибка тестовой отправки:', errorData);
+      
+      // Формируем понятное сообщение об ошибке
+      let errorMessage = 'Ошибка отправки в Telegram';
+      if (errorData.description?.includes('bot was blocked')) {
+        errorMessage = 'Бот заблокирован пользователем. Разблокируйте бота и попробуйте снова.';
+      } else if (errorData.description?.includes('chat not found')) {
+        errorMessage = '❌ ЧАТ НЕ НАЙДЕН!\n\n🔴 ВЫ ЗАБЫЛИ САМЫЙ ВАЖНЫЙ ШАГ:\n\n1️⃣ Откройте Telegram\n2️⃣ Найдите вашего бота по username (например @YourBot)\n3️⃣ ОБЯЗАТЕЛЬНО нажмите кнопку "СТАРТ" или отправьте /start\n4️⃣ После этого вернитесь сюда и нажмите "Тестировать" снова\n\n💡 БЕЗ /start бот не может отправлять сообщения!';
+      } else if (errorData.description?.includes('bots can\'t send messages to bots')) {
+        errorMessage = 'Нельзя отправлять сообщения другим ботам! Chat ID должен быть вашим личным чатом или группой. Используйте @userinfobot чтобы получить правильный Chat ID.';
+      } else if (errorData.description?.includes('Unauthorized')) {
+        errorMessage = 'Неверный токен бота. Проверьте правильность токена от @BotFather.';
+      }
+      
+      return c.json({ 
+        error: errorMessage, 
+        details: errorData 
+      }, 400);
+    }
+    
+    const result = await response.json();
+    console.log('[Telegram] Тестовое сообщение отправлено успешно:', result);
+    
+    return c.json({ 
+      success: true, 
+      message: 'Тестовое сообщение отправлено успешно!',
+      messageId: result.result?.message_id
+    });
+    
+  } catch (error: any) {
+    console.error('[Telegram] Ошибка тестирования:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
 // Mount Routes
 app.route('/make-server-c5bcdb1f', routes);
 app.route('/functions/v1/make-server-c5bcdb1f', routes);
+
+// Root health check (без префикса для тестирования)
+app.get('/health', (c) => {
+  return c.json({ status: "ok", message: "DryTrack server is running" });
+});
+
+app.get('/', (c) => {
+  return c.json({ 
+    status: "ok", 
+    message: "DryTrack API Server",
+    version: "1.0.0",
+    endpoints: [
+      '/make-server-c5bcdb1f/health',
+      '/make-server-c5bcdb1f/cycles',
+      '/make-server-c5bcdb1f/sheets/current-work'
+    ]
+  });
+});
 
 // Initialize bucket on startup
 (async () => {
@@ -1102,5 +1484,12 @@ app.route('/functions/v1/make-server-c5bcdb1f', routes);
     console.error('[Server] Bucket initialization failed:', error);
   }
 })();
+
+// Start server
+console.log('[Server] Starting DryTrack server...');
+console.log('[Server] Available routes:');
+console.log('  - GET /health');
+console.log('  - GET /make-server-c5bcdb1f/*');
+console.log('  - GET /functions/v1/make-server-c5bcdb1f/*');
 
 Deno.serve(app.fetch);
