@@ -258,7 +258,7 @@ export default function TelegramSettings() {
           {lang === 'ru' ? 'Пример сообщения:' : 'Pranešimo pavyzdys:'}
         </p>
         <div className="bg-white rounded-xl p-4 border border-gray-200 font-mono text-sm text-gray-700 whitespace-pre-line">
-{`📦 SVĖRIMAS | Džiovykla 12
+{`📦 12
 
 📅 17.03.2026 14:35
 ⏱ 48val nuo pradžios
@@ -271,10 +271,6 @@ Rezultatas:
 📦 12.0t ✅
 📦 11.8t ✅
 
-Vidutinis (3 artimi): 11.9t/dėžė ✅
-Iš viso: 47.8t
-
-📊 Vidurkis 3 artимų дезиų:
 📉 12.8t → 11.9t (-0.9t per 6.0val)
 ⚡️ Greitis: 0.150t/val
 

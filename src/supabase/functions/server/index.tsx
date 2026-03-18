@@ -1091,7 +1091,7 @@ routes.post('/check-app-password', async (c) => {
       savedPassword = 'drytrack2024';
     }
     
-    console.log('[AppPassword] Проверка пароля приложения');
+    console.log('[AppPassword] Проверка пароля приложе��ия');
     
     if (password === savedPassword) {
       return c.json({ success: true });
@@ -1306,12 +1306,12 @@ routes.post('/send-telegram-weighing', async (c) => {
       const lossRate = timeDiff > 0 ? (weightLoss / timeDiff) : 0;
       
       if (weightLoss > 0) {
-        changeInfo = `\n\n📊 Vidurkis 3 artimų dėžių:\n📉 ${previousAverage.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+        changeInfo = `\n\n📉 ${previousAverage.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
       }
     }
     
     // УПРОЩЕННОЕ СООБЩЕНИЕ
-    const message = `📦 <b>SVĖRIMAS | Džiovykla ${cycle.chamberNumber}</b>
+    const message = `<b>📦 ${cycle.chamberNumber}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
@@ -1319,10 +1319,7 @@ routes.post('/send-telegram-weighing', async (c) => {
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
-${boxList}
-
-<b>Vidutinis (3 artimi): ${averageWeight}t/dėžė ${statusEmoji}</b>
-Iš viso: ${totalWeight}t${changeInfo}${recommendationText}`.trim();
+${boxList}${changeInfo}${recommendationText}`.trim();
     
     // Отправляем сообщение в Telegram
     const telegramUrl = `https://api.telegram.org/bot${settings.botToken}/sendMessage`;
