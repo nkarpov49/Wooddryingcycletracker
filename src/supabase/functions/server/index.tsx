@@ -1181,24 +1181,28 @@ routes.post('/wood-settings', async (c) => {
 routes.post('/check-app-password', async (c) => {
   try {
     const { password } = await c.req.json();
-    
-    // Получаем сохраненный пароль из KV
-    let savedPassword = await kv.get('app_password');
-    
-    // Если пароль не установлен, используем дефолтный
+
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'app_password')
+      .single();
+
+    let savedPassword = data?.value;
+
     if (!savedPassword) {
       savedPassword = 'drytrack2024';
     }
-    
-    console.log('[AppPassword] Проверка пароля приложе��ия');
-    
+
+    console.log('[AppPassword] Проверка пароля приложения');
+
     if (password === savedPassword) {
       return c.json({ success: true });
     } else {
       return c.json({ success: false, error: 'Invalid password' });
     }
   } catch (error: any) {
-    console.error('[AppPassword] Ошибка проверки пароля:', error);
+    console.error('[AppPassword] Ошибка:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });
@@ -1207,24 +1211,28 @@ routes.post('/check-app-password', async (c) => {
 routes.post('/check-admin-password', async (c) => {
   try {
     const { password } = await c.req.json();
-    
-    // Получаем сохраненный пароль администратора из KV
-    let savedPassword = await kv.get('admin_password');
-    
-    // Если пароль не установлен, используем дефолтный
+
+    const { data } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'admin_password')
+      .single();
+
+    let savedPassword = data?.value;
+
     if (!savedPassword) {
       savedPassword = 'admin2024';
     }
-    
+
     console.log('[AdminPassword] Проверка пароля администратора');
-    
+
     if (password === savedPassword) {
       return c.json({ success: true });
     } else {
       return c.json({ success: false, error: 'Invalid password' });
     }
   } catch (error: any) {
-    console.error('[AdminPassword] Ошибка проверки пароля:', error);
+    console.error('[AdminPassword] Ошибка:', error);
     return c.json({ success: false, error: error.message }, 500);
   }
 });
@@ -1233,20 +1241,26 @@ routes.post('/check-admin-password', async (c) => {
 routes.post('/password-settings', async (c) => {
   try {
     const { appPassword, adminPassword } = await c.req.json();
-    
+
     if (appPassword) {
-      await kv.set('app_password', appPassword);
+      await supabase.from('settings').upsert({
+        key: 'app_password',
+        value: appPassword
+      });
       console.log('[PasswordSettings] Пароль приложения обновлен');
     }
-    
+
     if (adminPassword) {
-      await kv.set('admin_password', adminPassword);
+      await supabase.from('settings').upsert({
+        key: 'admin_password',
+        value: adminPassword
+      });
       console.log('[PasswordSettings] Пароль администратора обновлен');
     }
-    
+
     return c.json({ success: true });
   } catch (error: any) {
-    console.error('[PasswordSettings] Ошибка сохранения паролей:', error);
+    console.error('[PasswordSettings] Ошибка:', error);
     return c.json({ error: error.message }, 500);
   }
 });
