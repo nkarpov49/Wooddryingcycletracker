@@ -494,26 +494,125 @@ routes.post('/weather', async (c) => {
 // НОВЫЙ: Получить текущие работы из Sheets (через POST от Apps Script)
 routes.post('/sheets/update-current-work', async (c) => {
   try {
+    console.log("🔥 SQL ENDPOINT HIT");
+
     const body = await c.req.json();
-    
-    console.log('[Sheets] Получены данные о текущих работах:', body);
-    
-    // Сохраняем данные в KV store
-    await kv.set('current_work', {
-      line1: body.line1 || { rawText: '', sequentialNumber: null },
-      line2: body.line2 || { rawText: '', sequentialNumber: null },
-      line3: body.line3 || { rawText: '', sequentialNumber: null },
-      timestamp: new Date().toISOString()
+
+    const timestamp = body.timestamp || new Date().toISOString();
+
+    const rows = Object.entries(body)
+      .filter(([key]) => key.startsWith("line"))
+      .map(([key, value]: any) => ({
+        line_number: Number(key.replace("line", "")),
+        sequential_number: value.sequentialNumber,
+        raw_text: value.rawText,
+        updated_at: timestamp
+      }));
+
+    const { error } = await supabase
+      .from("current_work")
+      .upsert(rows, { onConflict: "line_number" });
+
+    if (error) {
+      console.error("❌ SQL ERROR:", error);
+      return c.json({ error }, 500);
+    }
+
+    return c.json({ success: true });
+
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+
+// НОВЫЙ: Получить текущие работы (для фронтенда)
+routes.get('/sheets/current-work', async (c) => {
+  try {
+    console.log('[Sheets] Запрос текущих работ');
+
+    // 1. SQL → current_work
+    const { data: rows, error } = await supabase
+      .from("current_work")
+      .select("*")
+      .order("line_number");
+
+    if (error) {
+      console.error("❌ SQL ERROR:", error);
+      return c.json({ error }, 500);
+    }
+
+    if (!rows || rows.length === 0) {
+      return c.json({ currentWork: [] });
+    }
+
+    // 2. Преобразуем
+    const data: any = {};
+
+    for (const row of rows) {
+      data[`line${row.line_number}`] = {
+        rawText: row.raw_text,
+        sequentialNumber: row.sequential_number
+      };
+    }
+
+    data.timestamp = rows[0]?.updated_at;
+
+    // 3. Получаем cycles из KV (пока)
+    const { data: dbData } = await supabase
+      .from("kv_store_c5bcdb1f")
+      .select("key, value")
+      .like("key", "cycle_%")
+      .limit(1000);
+
+    const cyclesMap = new Map();
+
+    for (const item of dbData || []) {
+      const seq = item.value?.sequentialNumber;
+      if (seq) {
+        cyclesMap.set(seq, item.value);
+      }
+    }
+
+    // 4. Формируем результат
+    const currentWork = [];
+
+    for (let i = 1; i <= 3; i++) {
+      const line = data[`line${i}`];
+
+      if (line?.sequentialNumber) {
+        currentWork.push({
+          lineId: String(i),
+          sequentialNumber: line.sequentialNumber,
+          rawText: line.rawText || '',
+          cycle: cyclesMap.get(line.sequentialNumber) || null
+        });
+      }
+    }
+
+    // 5. Подписываем URL
+    for (const work of currentWork) {
+      if (work.cycle) {
+        try {
+          work.cycle = await signCycleUrls(work.cycle);
+        } catch (e) {
+          console.error('[Sheets] Ошибка подписания URL:', e);
+        }
+      }
+    }
+
+    return c.json({
+      currentWork,
+      timestamp: data.timestamp
     });
-    
-    return c.json({ 
-      success: true, 
-      message: 'Данные о текущих работах обновлеы' 
-    });
-    
+
   } catch (error: any) {
-    console.error('[Sheets] Ошибка обновления текущих работ:', error);
-    return c.json({ error: error.message }, 500);
+    console.error('[Sheets] ERROR:', error);
+
+    return c.json({
+      currentWork: [],
+      error: error.message
+    });
   }
 });
 
