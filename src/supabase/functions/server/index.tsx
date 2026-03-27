@@ -1140,18 +1140,21 @@ routes.post('/analyze-weight', async (c) => {
 routes.get('/wood-settings', async (c) => {
   try {
     console.log('[WoodSettings] Запрос настроек пород дерева');
-    
-    const settings = await kv.get('wood_type_settings');
-    
-    if (!settings) {
-      console.log('[WoodSettings] Настройки не найдены, возвращаем пустой массив');
+
+    const { data, error } = await supabase
+      .from('wood_type_settings')
+      .select('*')
+      .order('name');
+
+    if (error) {
+      console.error('[WoodSettings] Ошибка SQL:', error);
       return c.json([]);
     }
-    
-    console.log('[WoodSettings] Найдены настройки для пород:', settings.length);
-    return c.json(settings);
+
+    console.log('[WoodSettings] Найдены настройки:', data.length);
+    return c.json(data);
   } catch (error: any) {
-    console.error('[WoodSettings] Ошибка получения настроек:', error);
+    console.error('[WoodSettings] Ошибка получения:', error);
     return c.json([]);
   }
 });
@@ -1160,19 +1163,47 @@ routes.get('/wood-settings', async (c) => {
 routes.post('/wood-settings', async (c) => {
   try {
     console.log('[WoodSettings] Сохранение настроек пород дерева');
-    
+
     const body = await c.req.json();
-    
+
     if (!Array.isArray(body)) {
       return c.json({ error: 'Неверный формат данных' }, 400);
     }
-    
-    await kv.set('wood_type_settings', body);
-    
-    console.log('[WoodSettings] Настройки сохранены для пород:', body.length);
+
+    // 1. Удаляем старые данные
+    const { error: deleteError } = await supabase
+      .from('wood_type_settings')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // удаляем всё
+
+    if (deleteError) {
+      console.error('[WoodSettings] Ошибка удаления:', deleteError);
+      return c.json({ error: deleteError.message }, 500);
+    }
+
+    // 2. Подготавливаем данные под SQL
+    const formatted = body.map((item: any) => ({
+      name: item.name,
+      warmup_time: item.warmupTime,
+      weight_limit: item.weightLimit,
+      drying_rate_time: item.dryingRateTime,
+    }));
+
+    // 3. Вставляем новые
+    const { error: insertError } = await supabase
+      .from('wood_type_settings')
+      .insert(formatted);
+
+    if (insertError) {
+      console.error('[WoodSettings] Ошибка вставки:', insertError);
+      return c.json({ error: insertError.message }, 500);
+    }
+
+    console.log('[WoodSettings] Успешно сохранено:', formatted.length);
     return c.json({ success: true });
+
   } catch (error: any) {
-    console.error('[WoodSettings] Ошибка сохранения настроек:', error);
+    console.error('[WoodSettings] Ошибка сохранения:', error);
     return c.json({ error: error.message }, 500);
   }
 });
