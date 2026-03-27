@@ -1151,8 +1151,17 @@ routes.get('/wood-settings', async (c) => {
       return c.json([]);
     }
 
-    console.log('[WoodSettings] Найдены настройки:', data.length);
-    return c.json(data);
+    // 🔥 ВАЖНО: конвертация в старый формат
+    const formatted = data.map((item: any) => ({
+      name: item.name,
+      warmupTime: item.warmup_time,
+      weightLimit: item.weight_limit,
+      dryingRateTime: item.drying_rate_time,
+    }));
+
+    console.log('[WoodSettings] Найдены настройки:', formatted.length);
+    return c.json(formatted);
+
   } catch (error: any) {
     console.error('[WoodSettings] Ошибка получения:', error);
     return c.json([]);
