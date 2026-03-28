@@ -267,23 +267,37 @@ export default function CycleList() {
       }
 
       return list.sort((a, b) => {
-          switch (sortOption) {
-              case 'SeqDesc':
-                  return (parseInt(b.sequentialNumber.replace(/\D/g,'')) || 0) - (parseInt(a.sequentialNumber.replace(/\D/g,'')) || 0);
-              case 'SeqAsc':
-                  return (parseInt(a.sequentialNumber.replace(/\D/g,'')) || 0) - (parseInt(b.sequentialNumber.replace(/\D/g,'')) || 0);
-              case 'DateNew':
-                  return new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime();
-              case 'QualityDesc':
-                  return (b.qualityRating || 0) - (a.qualityRating || 0);
-              case 'DurationAsc':
-                  const durA = (a.startDate && a.endDate) ? differenceInHours(parseISO(a.endDate), parseISO(a.startDate)) : 999999;
-                  const durB = (b.startDate && b.endDate) ? differenceInHours(parseISO(b.endDate), parseISO(b.startDate)) : 999999;
-                  return durA - durB;
-              default:
-                  return 0;
-          }
-      });
+  const getSeq = (val: any) =>
+    parseInt(String(val || "").replace(/\D/g, "")) || 0;
+
+  switch (sortOption) {
+    case 'SeqDesc':
+      return getSeq(b.sequentialNumber) - getSeq(a.sequentialNumber);
+
+    case 'SeqAsc':
+      return getSeq(a.sequentialNumber) - getSeq(b.sequentialNumber);
+
+    case 'DateNew':
+      return new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime();
+
+    case 'QualityDesc':
+      return (b.qualityRating || 0) - (a.qualityRating || 0);
+
+    case 'DurationAsc':
+      const durA = (a.startDate && a.endDate)
+        ? differenceInHours(parseISO(a.endDate), parseISO(a.startDate))
+        : 999999;
+
+      const durB = (b.startDate && b.endDate)
+        ? differenceInHours(parseISO(b.endDate), parseISO(b.startDate))
+        : 999999;
+
+      return durA - durB;
+
+    default:
+      return 0;
+  }
+});
   }, [filteredCycles, sortOption, activeFilters]);
 
   // Unique Wood Types for Dropdown
