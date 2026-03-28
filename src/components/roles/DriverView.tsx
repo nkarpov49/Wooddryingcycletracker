@@ -412,7 +412,7 @@ export default function DriverView() {
   const handleStartHold = () => {
     let progress = 0;
     const interval = setInterval(() => {
-      progress += 5;
+      progress += 6;
       setHoldProgress(progress);
       if (progress >= 100) {
         clearInterval(interval);
@@ -739,7 +739,7 @@ export default function DriverView() {
 
       {/* Подсказка о скрытой кнопке */}
       <div className="fixed bottom-4 left-4 right-4 bg-blue-900/90 text-white text-xs p-3 rounded-lg text-center">
-        💡 {lang === 'ru' ? 'Удерживайте заголовок 5 секунд для выхода' : 'Palaikykite antraštę 5 sekundes išėjimui'}
+        💡 {lang === 'ru' ? 'Удерживайте ЗАГОЛОВОК 2 секунды для выхода' : 'Palaikykite antraštę 2 sekundes išėjimui'}
       </div>
     </div>
   );
