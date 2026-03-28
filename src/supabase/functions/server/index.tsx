@@ -411,6 +411,7 @@ routes.post('/upload', async (c) => {
 routes.post('/weather', async (c) => {
   try {
     const { startDate, endDate } = await c.req.json();
+    console.log('Weather request:', startDate, endDate);
 
     const start = new Date(startDate);
     const end = new Date(endDate);
