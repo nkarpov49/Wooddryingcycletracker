@@ -221,7 +221,7 @@ export default function CalendarView({ cycles }: CalendarViewProps) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden font-sans">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 px-6 border-b border-gray-100 bg-white backdrop-blur-md sticky top-0 z-30">
+      <div className="flex items-center justify-between p-4 px-6 border-b border-gray-100 bg-white backdrop-blur-md sticky top-0 z-10">
         <h2 className="text-2xl font-bold text-gray-900 capitalize flex items-center gap-3">
             {format(currentDate, 'LLLL yyyy', { locale })}
         </h2>
