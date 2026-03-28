@@ -412,7 +412,7 @@ export default function DriverView() {
   const handleStartHold = () => {
     let progress = 0;
     const interval = setInterval(() => {
-      progress += 2;
+      progress += 5;
       setHoldProgress(progress);
       if (progress >= 100) {
         clearInterval(interval);
