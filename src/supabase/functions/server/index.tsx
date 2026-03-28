@@ -411,84 +411,94 @@ routes.post('/upload', async (c) => {
 routes.post('/weather', async (c) => {
   try {
     const { startDate, endDate } = await c.req.json();
-    if (!startDate || !endDate) return c.json({ error: "Missing dates" }, 400);
 
     const start = new Date(startDate);
     const end = new Date(endDate);
-    const today = startOfDay(new Date());
-    const days = eachDayOfInterval({ start, end });
-    
-    const weatherData: Record<string, { temp: number, code: number }> = {};
-    const missingDays: Date[] = [];
 
-    await Promise.all(days.map(async (day) => {
-      const dateStr = format(day, 'yyyy-MM-dd');
-      if (isBefore(day, today)) {
-        const cached = await kv.get(`weather_${dateStr}`);
-        if (cached) weatherData[dateStr] = cached;
-        else missingDays.push(day);
-      } else {
-        missingDays.push(day);
-      }
-    }));
+    // 1. Получаем из SQL
+    const { data, error } = await supabase
+      .from('weather')
+      .select('*')
+      .gte('date', startDate)
+      .lte('date', endDate);
 
-    if (missingDays.length > 0) {
-      const ninetyDaysAgo = subDays(today, 90);
-      const oldDays = missingDays.filter(d => isBefore(d, ninetyDaysAgo));
-      const recentDays = missingDays.filter(d => !isBefore(d, ninetyDaysAgo));
-
-      if (oldDays.length > 0) {
-        const minDate = oldDays.reduce((a, b) => (a < b ? a : b));
-        const maxDate = oldDays.reduce((a, b) => (a > b ? a : b));
-        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=55.5264&longitude=25.1027&start_date=${format(minDate, 'yyyy-MM-dd')}&end_date=${format(maxDate, 'yyyy-MM-dd')}&daily=temperature_2m_mean,weather_code&timezone=Europe%2FVilnius`;
-        const res = await fetch(url);
-        if (res.ok) {
-           const data = await res.json();
-           if (data.daily) {
-             data.daily.time.forEach((t: string, i: number) => {
-               if (data.daily.temperature_2m_mean[i] !== null) {
-                 const val = { temp: data.daily.temperature_2m_mean[i], code: data.daily.weather_code[i] };
-                 weatherData[t] = val;
-                 kv.set(`weather_${t}`, val);
-               }
-             });
-           }
-        }
-      }
-
-      if (recentDays.length > 0) {
-        const minDate = recentDays.reduce((a, b) => (a < b ? a : b));
-        const maxDate = recentDays.reduce((a, b) => (a > b ? a : b));
-        const limitDate = addDays(today, 10);
-        const actualMax = maxDate > limitDate ? limitDate : maxDate;
-        
-        if (minDate <= actualMax) {
-            const url = `https://api.open-meteo.com/v1/forecast?latitude=55.5264&longitude=25.1027&start_date=${format(minDate, 'yyyy-MM-dd')}&end_date=${format(actualMax, 'yyyy-MM-dd')}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Europe%2FVilnius`;
-            const res = await fetch(url);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.daily) {
-                    data.daily.time.forEach((t: string, i: number) => {
-                        const max = data.daily.temperature_2m_max[i];
-                        const min = data.daily.temperature_2m_min[i];
-                        if (max !== null && min !== null) {
-                            const val = { temp: (max + min) / 2, code: data.daily.weather_code[i] };
-                            weatherData[t] = val;
-                            if (t < format(today, 'yyyy-MM-dd')) kv.set(`weather_${t}`, val);
-                        }
-                    });
-                }
-            }
-        }
-      }
+    if (error) {
+      return c.json({ error: error.message }, 500);
     }
+
+    const weatherData: Record<string, any> = {};
+    const existingDates = new Set(data.map(d => d.date));
+
+    data.forEach(d => {
+      weatherData[d.date] = {
+        temp: d.temp,
+        code: d.code
+      };
+    });
+
+    // 2. Ищем недостающие дни
+    const days = eachDayOfInterval({ start, end });
+
+    const missing = days.filter(d => {
+      const str = format(d, 'yyyy-MM-dd');
+      return !existingDates.has(str);
+    });
+
+    // 3. Если всё есть → сразу возвращаем
+    if (missing.length === 0) {
+      return c.json(weatherData);
+    }
+
+    // 4. Берём только нужный диапазон
+    const minDate = format(missing[0], 'yyyy-MM-dd');
+    const maxDate = format(missing[missing.length - 1], 'yyyy-MM-dd');
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=55.5264&longitude=25.1027&start_date=${minDate}&end_date=${maxDate}&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=Europe%2FVilnius`;
+
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      return c.json(weatherData);
+    }
+
+    const apiData = await res.json();
+    const toInsert: any[] = [];
+
+    if (apiData.daily) {
+      apiData.daily.time.forEach((t: string, i: number) => {
+        const max = apiData.daily.temperature_2m_max[i];
+        const min = apiData.daily.temperature_2m_min[i];
+
+        if (max !== null && min !== null) {
+          const val = {
+            date: t,
+            temp: (max + min) / 2,
+            code: apiData.daily.weather_code[i]
+          };
+
+          weatherData[t] = {
+            temp: val.temp,
+            code: val.code
+          };
+
+          toInsert.push(val);
+        }
+      });
+    }
+
+    // 5. Сохраняем новые данные
+    if (toInsert.length > 0) {
+      await supabase
+        .from('weather')
+        .upsert(toInsert, { onConflict: 'date' });
+    }
+
     return c.json(weatherData);
-  } catch (error: any) {
-    console.error("Error fetching weather:", error);
-    return c.json({ error: error.message }, 500);
+
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
   }
 });
-
 // Google Sheets Sync Endpoints
 
 // НОВЫЙ: Получить текущие работы из Sheets (через POST от Apps Script)
