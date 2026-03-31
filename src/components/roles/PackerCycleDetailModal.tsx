@@ -1,15 +1,3 @@
-import { supabase } from '../../utils/client';
-
-const getImageUrl = (path: string) => {
-  if (!path) return '';
-
-  const { data } = supabase.storage
-    .from('make-c5bcdb1f-drying-chamber-photos')
-    .getPublicUrl(path);
-
-  return data?.publicUrl || '';
-};
-
 import React, { useState } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
@@ -34,11 +22,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   
   // Состояние редактирования
   const [editedComment, setEditedComment] = useState(cycle.overallComment || '');
-  const [editedResultPhotos, setEditedResultPhotos] = useState(
-  (cycle.resultPhotos || []).map((p: any) => ({
-    path: p.path
-  }))
-);
+  const [editedResultPhotos, setEditedResultPhotos] = useState(cycle.resultPhotos || []);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -51,74 +35,61 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const recipePhotos = cycle.recipePhotoPath
-  ? [{ path: cycle.recipePhotoPath }]
-  : [];
-  console.log("FINAL URL:", getImageUrl(cycle.recipePhotoPath));
-  
+  const allRecipePhotos = cycle.recipePhotos || [];
+  const duration = cycle.startDate && cycle.endDate 
+    ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
+    : null;
 
-const duration = cycle.startDate && cycle.endDate 
-  ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
-  : null;
+  const openLightbox = (type: 'recipe' | 'result', index: number) => {
+    setCurrentPhotoType(type);
+    setCurrentPhotoIndex(index);
+    setLightboxOpen(true);
+  };
 
-const openLightbox = (type: 'recipe' | 'result', index: number) => {
-  setCurrentPhotoType(type);
-  setCurrentPhotoIndex(index);
-  setLightboxOpen(true);
-};
+  const currentPhotos = currentPhotoType === 'recipe' ? allRecipePhotos : editedResultPhotos;
 
-const currentPhotos = currentPhotoType === 'recipe' 
-  ? recipePhotos
-  : editedResultPhotos;
+  const nextPhoto = () => {
+    setCurrentPhotoIndex((prev) => (prev + 1) % currentPhotos.length);
+  };
 
-const photosForZoomViewer = currentPhotos.map((p, idx) => ({
-  url: getImageUrl(p.path),
-  caption: (currentPhotoType === 'recipe' 
-  ? `${t('recipePhoto')} ${idx + 1}` 
-  : `${t('resultPhoto')} ${idx + 1}`)
-}));
+  const prevPhoto = () => {
+    setCurrentPhotoIndex((prev) => (prev - 1 + currentPhotos.length) % currentPhotos.length);
+  };
 
-const nextPhoto = () => {
-  if (!currentPhotos.length) return;
-  setCurrentPhotoIndex((prev) => (prev + 1) % currentPhotos.length);
-};
-
-const prevPhoto = () => {
-  if (!currentPhotos.length) return;
-  setCurrentPhotoIndex((prev) => (prev - 1 + currentPhotos.length) % currentPhotos.length);
-};
-
-const handleSave = async () => {
-  if (!cycle.id) return;
-  
-  setSaving(true);
-  try {
-    const updatedCycle = await api.updateCycle(cycle.id, {
-      overallComment: editedComment,
-      resultPhotos: editedResultPhotos,
-    });
+  const handleSave = async () => {
+    if (!cycle.id) return;
     
-    toast.success(t('saved'));
-    
-    if (onUpdate) {
-      onUpdate({ ...cycle, ...updatedCycle });
+    setSaving(true);
+    try {
+      const updatedCycle = await api.updateCycle(cycle.id, {
+        overallComment: editedComment,
+        resultPhotos: editedResultPhotos,
+      });
+      
+      toast.success(t('saved'));
+      
+      if (onUpdate) {
+        onUpdate({ ...cycle, ...updatedCycle });
+      }
+      
+      // Закрываем модальное окно после сохранения
+      setTimeout(() => {
+        onClose();
+      }, 500);
+    } catch (error) {
+      console.error('Error saving cycle:', error);
+      toast.error(t('error'));
+    } finally {
+      setSaving(false);
     }
-    
-    setTimeout(() => {
-      onClose();
-    }, 500);
-  } catch (error) {
-    console.error('Error saving cycle:', error);
-    toast.error(t('error'));
-  } finally {
-    setSaving(false);
-  }
-};
+  };
+
   const handlePhotoUpload = async (file: File) => {
     setUploading(true);
     try {
       const { path } = await api.uploadFile(file);
-      const newPhoto = { path, caption: '' };
+      const tempUrl = URL.createObjectURL(file);
+      const newPhoto = { path, url: tempUrl, caption: '' };
       setEditedResultPhotos([...editedResultPhotos, newPhoto]);
       toast.success(lang === 'ru' ? 'Фото добавлено' : 'Nuotrauka pridėta');
     } catch (error) {
@@ -158,22 +129,26 @@ const handleSave = async () => {
   const handleDeletePhoto = (index: number) => {
     setEditedResultPhotos(editedResultPhotos.filter((_, i) => i !== index));
   };
-  console.log("PHOTO PATH:", currentPhotos)
 
   // Проверка есть ли изменения
   const hasChanges = editedComment !== (cycle.overallComment || '') || 
                      JSON.stringify(editedResultPhotos) !== JSON.stringify(cycle.resultPhotos || []);
 
   // Lightbox
-if (lightboxOpen && currentPhotos.length > 0) {
-  return (
-    <PhotoZoomViewer 
-      photos={photosForZoomViewer}
-      initialIndex={currentPhotoIndex}
-      onClose={() => setLightboxOpen(false)}
-    />
-  );
-}
+  if (lightboxOpen && currentPhotos.length > 0) {
+    const photosForZoomViewer = currentPhotos.map((p, idx) => ({
+      url: p.url || '',
+      caption: p.caption || (currentPhotoType === 'recipe' ? `${t('recipePhoto')} ${idx + 1}` : `${t('resultPhoto')} ${idx + 1}`)
+    }));
+    
+    return (
+      <PhotoZoomViewer 
+        photos={photosForZoomViewer}
+        initialIndex={currentPhotoIndex}
+        onClose={() => setLightboxOpen(false)}
+      />
+    );
+  }
 
   // Modal
   return (
@@ -351,30 +326,26 @@ if (lightboxOpen && currentPhotos.length > 0) {
           )}
 
           {/* Recipe Photos */}
-          {recipePhotos.length > 0 && (
-  <div>
-    <div className="flex items-center gap-2 mb-2">
-      <ImageIcon className="w-4 h-4 text-amber-600" />
-      <h3 className="text-sm font-bold text-gray-900">{t('recipePhoto')}</h3>
-    </div>
+          {allRecipePhotos.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <ImageIcon className="w-4 h-4 text-amber-600" />
+                <h3 className="text-sm font-bold text-gray-900">{t('recipePhoto')}</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {allRecipePhotos.map((photo, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => openLightbox('recipe', idx)}
+                    className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-amber-400 transition-all cursor-pointer group active:scale-95"
+                  >
+                    <img src={photo.url} alt={`Recipe ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-    <div className="grid grid-cols-3 gap-2">
-      {recipePhotos.map((photo, idx) => (
-        <button
-          key={idx}
-          onClick={() => openLightbox('recipe', idx)}
-          className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-amber-400 transition-all cursor-pointer group active:scale-95"
-        >
-          <img
-            src={getImageUrl(photo.path)}
-            alt={`Recipe ${idx}`}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        </button>
-      ))}
-    </div>
-  </div>
-)}
           {/* Result Photos Section - Always Editable if allowEdit */}
           {allowEdit && (
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-4">
@@ -390,11 +361,7 @@ if (lightboxOpen && currentPhotos.length > 0) {
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {editedResultPhotos.map((photo, idx) => (
                     <div key={idx} className="relative aspect-square bg-white rounded-xl overflow-hidden border-2 border-green-200 shadow-sm group">
-                      <img 
-  src={getImageUrl(photo.path)} 
-  alt={`Recipe ${idx}`} 
-  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-/>
+                      <img src={photo.url} alt={`Result ${idx}`} className="w-full h-full object-cover" />
                       <button
                         onClick={() => handleDeletePhoto(idx)}
                         className="absolute top-1.5 right-1.5 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg opacity-0 group-hover:opacity-100 active:scale-90"
@@ -467,11 +434,7 @@ if (lightboxOpen && currentPhotos.length > 0) {
                         onClick={() => openLightbox('result', idx)}
                         className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-green-400 transition-all cursor-pointer group active:scale-95"
                       >
-                        <img 
-  src={getImageUrl(photo.path)} 
-  alt={`Recipe ${idx}`} 
-  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-/>
+                        <img src={photo.url} alt={`Result ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </button>
                     ))}
                   </div>
