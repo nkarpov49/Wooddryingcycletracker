@@ -1,11 +1,15 @@
-import { supabase } from '../../utils/client'
+import { supabase } from '../../utils/client';
+
 const getImageUrl = (path: string) => {
+  if (!path) return '';
+
   const { data } = supabase.storage
     .from('make-c5bcdb1f-drying-chamber-photos')
-    .getPublicUrl(path)
+    .getPublicUrl(path);
 
-  return data.publicUrl
-}
+  return data?.publicUrl || '';
+};
+
 import React, { useState } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
@@ -43,57 +47,73 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const allRecipePhotos = typeof cycle.recipePhotos === 'string'
-  ? JSON.parse(cycle.recipePhotos)
-  : (cycle.recipePhotos || [])
-  const duration = cycle.startDate && cycle.endDate 
-    ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
-    : null;
+  const allRecipePhotos = (() => {
+  try {
+    return typeof cycle.recipePhotos === 'string'
+      ? JSON.parse(cycle.recipePhotos)
+      : (cycle.recipePhotos || []);
+  } catch {
+    return [];
+  }
+})();
 
-  const openLightbox = (type: 'recipe' | 'result', index: number) => {
-    setCurrentPhotoType(type);
-    setCurrentPhotoIndex(index);
-    setLightboxOpen(true);
-  };
+const duration = cycle.startDate && cycle.endDate 
+  ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
+  : null;
 
-  const photosForZoomViewer = currentPhotos.map((p, idx) => ({
+const openLightbox = (type: 'recipe' | 'result', index: number) => {
+  setCurrentPhotoType(type);
+  setCurrentPhotoIndex(index);
+  setLightboxOpen(true);
+};
 
-  const nextPhoto = () => {
-    setCurrentPhotoIndex((prev) => (prev + 1) % currentPhotos.length);
-  };
+const currentPhotos = currentPhotoType === 'recipe' 
+  ? allRecipePhotos 
+  : editedResultPhotos;
 
-  const prevPhoto = () => {
-    setCurrentPhotoIndex((prev) => (prev - 1 + currentPhotos.length) % currentPhotos.length);
-  };
+const photosForZoomViewer = currentPhotos.map((p, idx) => ({
+  url: getImageUrl(p.path),
+  caption: p.caption || (currentPhotoType === 'recipe' 
+    ? `${t('recipePhoto')} ${idx + 1}` 
+    : `${t('resultPhoto')} ${idx + 1}`)
+}));
 
-  const handleSave = async () => {
-    if (!cycle.id) return;
+const nextPhoto = () => {
+  if (!currentPhotos.length) return;
+  setCurrentPhotoIndex((prev) => (prev + 1) % currentPhotos.length);
+};
+
+const prevPhoto = () => {
+  if (!currentPhotos.length) return;
+  setCurrentPhotoIndex((prev) => (prev - 1 + currentPhotos.length) % currentPhotos.length);
+};
+
+const handleSave = async () => {
+  if (!cycle.id) return;
+  
+  setSaving(true);
+  try {
+    const updatedCycle = await api.updateCycle(cycle.id, {
+      overallComment: editedComment,
+      resultPhotos: editedResultPhotos,
+    });
     
-    setSaving(true);
-    try {
-      const updatedCycle = await api.updateCycle(cycle.id, {
-        overallComment: editedComment,
-        resultPhotos: editedResultPhotos,
-      });
-      
-      toast.success(t('saved'));
-      
-      if (onUpdate) {
-        onUpdate({ ...cycle, ...updatedCycle });
-      }
-      
-      // Закрываем модальное окно после сохранения
-      setTimeout(() => {
-        onClose();
-      }, 500);
-    } catch (error) {
-      console.error('Error saving cycle:', error);
-      toast.error(t('error'));
-    } finally {
-      setSaving(false);
+    toast.success(t('saved'));
+    
+    if (onUpdate) {
+      onUpdate({ ...cycle, ...updatedCycle });
     }
-  };
-
+    
+    setTimeout(() => {
+      onClose();
+    }, 500);
+  } catch (error) {
+    console.error('Error saving cycle:', error);
+    toast.error(t('error'));
+  } finally {
+    setSaving(false);
+  }
+};
   const handlePhotoUpload = async (file: File) => {
     setUploading(true);
     try {
@@ -145,22 +165,15 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                      JSON.stringify(editedResultPhotos) !== JSON.stringify(cycle.resultPhotos || []);
 
   // Lightbox
-  if (lightboxOpen && currentPhotos.length > 0) {
-    const photosForZoomViewer = currentPhotos.map((p, idx) => ({
-  url: getImageUrl(p.path),
-  caption: p.caption || (currentPhotoType === 'recipe' 
-    ? `${t('recipePhoto')} ${idx + 1}` 
-    : `${t('resultPhoto')} ${idx + 1}`)
-}));
-    
-    return (
-      <PhotoZoomViewer 
-        photos={photosForZoomViewer}
-        initialIndex={currentPhotoIndex}
-        onClose={() => setLightboxOpen(false)}
-      />
-    );
-  }
+if (lightboxOpen && currentPhotos.length > 0) {
+  return (
+    <PhotoZoomViewer 
+      photos={photosForZoomViewer}
+      initialIndex={currentPhotoIndex}
+      onClose={() => setLightboxOpen(false)}
+    />
+  );
+}
 
   // Modal
   return (
