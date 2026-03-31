@@ -410,24 +410,27 @@ console.log('🔥 sending cycleId:', selectedChamber.id);
 
       // ✅ Отправляем в Telegram (если настроен)
       try {
-        await api.sendWeighingToTelegram(selectedChamber.id, newWeighingRecord);
-        console.log('[Telegram] Сообщение отправлено');
-      } catch (telegramError: any) {
-        console.log('[Telegram] Ошибка отправки (возможно не настроен):', telegramError.message);
-        // Не показываем ошибку пользователю, так как это не критично
-      }
+  const response = await api.sendWeighingToTelegram(
+    selectedChamber.id,
+    newWeighingRecord
+  );
 
-      toast.success(t('saved'));
-      setSelectedChamber(null);
-      fetchActiveChambers();
-    } catch (error) {
-      console.error('Error saving result:', error);
-      toast.error(t('error'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  // если твой api возвращает fetch Response
+  if (response?.ok === false) {
+    const errorData = await response.json().catch(() => ({}));
+    console.error('[Telegram] ❌ Ошибка ответа:', errorData);
+  } else {
+    console.log('[Telegram] ✅ Сообщение отправлено');
+  }
 
+} catch (telegramError: any) {
+  console.error('[Telegram] ❌ Ошибка отправки:', telegramError?.message || telegramError);
+  // не блокируем UX
+}
+
+toast.success(t('saved'));
+setSelectedChamber(null);
+fetchActiveChambers();
   const handleStartHold = () => {
     let progress = 0;
     const interval = setInterval(() => {
