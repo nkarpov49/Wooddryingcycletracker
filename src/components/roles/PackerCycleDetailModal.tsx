@@ -1,4 +1,11 @@
 import { supabase } from '../../utils/client'
+const getImageUrl = (path: string) => {
+  const { data } = supabase.storage
+    .from('make-c5bcdb1f-drying-chamber-photos')
+    .getPublicUrl(path)
+
+  return data.publicUrl
+}
 import React, { useState } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
@@ -340,7 +347,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                     onClick={() => openLightbox('recipe', idx)}
                     className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-amber-400 transition-all cursor-pointer group active:scale-95"
                   >
-                    <img src={photo.url} alt={`Recipe ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    <img 
+  src={getImageUrl(photo.path)} 
+  alt={`Recipe ${idx}`} 
+  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+/>
                   </button>
                 ))}
               </div>
@@ -362,7 +373,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {editedResultPhotos.map((photo, idx) => (
                     <div key={idx} className="relative aspect-square bg-white rounded-xl overflow-hidden border-2 border-green-200 shadow-sm group">
-                      <img src={photo.url} alt={`Result ${idx}`} className="w-full h-full object-cover" />
+                      <img 
+  src={getImageUrl(photo.path)} 
+  alt={`Recipe ${idx}`} 
+  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+/>
                       <button
                         onClick={() => handleDeletePhoto(idx)}
                         className="absolute top-1.5 right-1.5 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 transition-all shadow-lg opacity-0 group-hover:opacity-100 active:scale-90"
@@ -435,7 +450,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                         onClick={() => openLightbox('result', idx)}
                         className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-green-400 transition-all cursor-pointer group active:scale-95"
                       >
-                        <img src={photo.url} alt={`Result ${idx}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img 
+  src={getImageUrl(photo.path)} 
+  alt={`Recipe ${idx}`} 
+  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+/>
                       </button>
                     ))}
                   </div>
