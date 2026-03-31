@@ -336,7 +336,7 @@ const loadWoodSettings = async () => {
       
       // Вычисляем временные метки
       const now = new Date();
-      const startDate = new Date(currentCycle.startDate || currentCycle.createdAt);
+      const startDate = new Date(currentCycle.start_date || currentCycle.created_at);
       const hoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
       
       // Получаем предыдущую историю взвешиваний
@@ -410,10 +410,22 @@ console.log('🔥 sending cycleId:', selectedChamber.id);
 
       // ✅ Отправляем в Telegram (если настроен)
       try {
-  const response = await api.sendWeighingToTelegram(
-    selectedChamber.id,
-    newWeighingRecord
+  async function sendWeighingToTelegram(cycleId: string, weighingRecord: any) {
+  return fetch(
+    `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/send-telegram-weighing`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`
+      },
+      body: JSON.stringify({
+        cycleId,
+        weighingRecord
+      })
+    }
   );
+}
 
   // если твой api возвращает fetch Response
   if (response?.ok === false) {
