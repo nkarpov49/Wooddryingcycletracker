@@ -43,7 +43,9 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const allRecipePhotos = cycle.recipePhotos || [];
+  const allRecipePhotos = typeof cycle.recipePhotos === 'string'
+  ? JSON.parse(cycle.recipePhotos)
+  : (cycle.recipePhotos || [])
   const duration = cycle.startDate && cycle.endDate 
     ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
     : null;
