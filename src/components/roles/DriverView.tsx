@@ -385,8 +385,7 @@ const loadWoodSettings = async () => {
       // Обновляем историю
       const updatedHistory = [...previousHistory, newWeighingRecord];
 
-      // 1. Обновляем цикл (FIX ID!)
-// 1. Обновляем цикл
+      // 1. Обновляем цикл
 await fetch(
   `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
   {
@@ -406,28 +405,6 @@ await fetch(
   }
 );
 
-// 2. Telegram
-await fetch(
-  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/send-telegram-weighing`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${publicAnonKey}`
-    },
-    body: JSON.stringify({
-      cycleId: selectedChamber.id, // ✅ ВОТ ТУТ ФИКС
-      weighingRecord: {
-        weights: weights.map(w => w.weight),
-        timestamp: now.toISOString(),
-        hoursFromStart: result.hoursFromStart,
-        weightLimit: result.weightLimit,
-        recommendation: result.recommendation,
-        recommendationData: result.recommendationData
-      }
-    })
-  }
-);
       console.log('🔥 selectedChamber:', selectedChamber);
 console.log('🔥 sending cycleId:', selectedChamber.id);
 
