@@ -228,7 +228,7 @@ export const api = {
   },
   
   async getCurrentWork() {
-  const res = await fetch('https://zbhvgsdiagwvpdvqvzsc.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work');
+  const res = await fetch('https://zzteuolgibfbulqdavof.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work');
   const data = await res.json();
 
   console.log("[API] RAW current work:", data);
