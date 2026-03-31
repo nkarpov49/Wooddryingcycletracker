@@ -50,6 +50,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   const recipePhotos = cycle.recipePhotoPath
   ? [{ path: cycle.recipePhotoPath }]
   : [];
+  console.log("FINAL URL:", getImageUrl(cycle.recipePhotoPath));
   }
 
 const duration = cycle.startDate && cycle.endDate 
