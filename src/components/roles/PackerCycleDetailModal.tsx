@@ -99,7 +99,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     try {
       const { path } = await api.uploadFile(file);
       const tempUrl = URL.createObjectURL(file);
-      const newPhoto = { path, url: tempUrl, caption: '' };
+      const newPhoto = { path, caption: '' };
       setEditedResultPhotos([...editedResultPhotos, newPhoto]);
       toast.success(lang === 'ru' ? 'Фото добавлено' : 'Nuotrauka pridėta');
     } catch (error) {
