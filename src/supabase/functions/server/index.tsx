@@ -907,7 +907,6 @@ routes.post('/sheets/update-current-work', async (c) => {
   }
 });
 
-
 // Webhook endpoint для приёма данных из Google Sheets
 // Когда оператор завершает сушку и в Google Sheets появляется новая строка,
 // Apps Script вызывает этот endpoint
