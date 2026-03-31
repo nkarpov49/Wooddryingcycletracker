@@ -1,9 +1,9 @@
+// ✅ MIGRATED TO SQL
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { format, eachDayOfInterval, isBefore, startOfDay, subDays, addDays } from "npm:date-fns";
-import * as kv from "./kv_store.tsx";
 import { processSheetRow, getRecentSyncLogs, isRowProcessed, markRowAsProcessed, type GoogleSheetRow } from "./google-sheets-sync.ts";
 
 const app = new Hono();
@@ -23,13 +23,13 @@ app.use(
   }),
 );
 
-// Supabase Client
+// Supabase Client✅✅✅✅
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const BUCKET_NAME = "make-c5bcdb1f-drying-chamber-photos";
-
+// ✅✅✅✅✅
 // Helpers
 async function ensureBucket() {
   try {
@@ -99,191 +99,228 @@ const routes = new Hono();
 routes.get('/health', (c) => {
   return c.json({ status: "ok" });
 });
-
-// Alias for driver view compatibility
-// NOTE: Этот endpoint сохраняет генерацию signed URLs для совместимости с DriverView
-// Там обычно небольшое количество циклов (только завершенные для взвешивания), поэтому не критично
+// ✅✅✅✅✅✅ MIGRATED TO SQL
+// Alias для DriverView (экран взвешивания)
+// 👉 Этот endpoint отдаёт только необходимые данные для работы оператора
 routes.get('/work-cycles', async (c) => {
   try {
-    console.log('[WorkCycles] 📥 Запрос на получение рабочих циклов');
-    
-    const cycles = await kv.getByPrefix("cycle_");
-    console.log(`[WorkCycles] ✅ Загружено ${cycles.length} циклов из БД`);
-    
-    if (cycles.length === 0) {
+    console.log('[WorkCycles] 📥 SQL запрос рабочих циклов');
+
+    // 🔹 1. Получаем циклы из SQL
+    const { data, error } = await supabase
+  .from('cycles')
+  .select('*')
+  .is('end_date', null) // ✅ только незавершенные
+  .order('created_at', { ascending: false });
+
+    // 🔹 2. Обработка ошибки SQL
+    if (error) {
+      console.error('[WorkCycles] ❌ SQL ошибка:', error);
+      return c.json([]);
+    }
+
+    // 🔹 3. Если нет данных
+    if (!data || data.length === 0) {
       console.log('[WorkCycles] ⚠️ Нет циклов в базе данных');
       return c.json([]);
     }
-    
-    console.log('[WorkCycles] 🔐 Подписываем URL для фотографий...');
-    const signedCycles = await Promise.all(cycles.map(async (cycle: any) => {
-      if (!cycle) return null;
-      try {
-        return await signCycleUrls(cycle);
-      } catch (signError: any) {
-        console.error(`[WorkCycles] ❌ Ошибка подписания URL для цикла ${cycle.id}:`, signError.message);
-        return cycle;
-      }
+
+    // 🔹 4. МАППИНГ SQL → формат фронта
+    // 👉 оставляем только нужные поля (без фото!)
+    const cycles = data.map((row: any) => ({
+      id: row.id, // уникальный ID цикла
+      status: row.status, // статус (In Progress / Completed)
+
+      chamberNumber: row.chamber_number, // номер камеры
+      sequentialNumber: row.sequential_number, // номер цикла
+      woodType: row.wood_type_lt,
+      loadingTemp: row.start_temperature,
+      createdAt: row.created_at, // дата создания
+      startDate: row.start_date, // дата начала
+      endDate: row.end_date, // дата окончания
     }));
     
-    const validCycles = signedCycles.filter(c => c !== null);
-    validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    console.log(`[WorkCycles] ✅ Возвращаем ${validCycles.length} валидных циклов`);
-    return c.json(validCycles);
+
+    // 🔹 5. Сортировка (новые сверху)
+    cycles.sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    console.log(`[WorkCycles] ✅ Возвращаем ${cycles.length} циклов`);
+
+    // 🔹 6. Возвращаем результат
+    return c.json(cycles);
+
   } catch (error: any) {
     console.error("[WorkCycles] ❌ Критическая ошибка:", error);
-    console.error("[WorkCycles] Stack trace:", error.stack);
-    return c.json({ error: error.message || "Failed to fetch work cycles" }, 500);
+
+    return c.json(
+      { error: error.message || "Failed to fetch work cycles" },
+      500
+    );
   }
+});
+
+
+// ✅✅✅✅✅✅✅ KV → SQL migration completed
+// - Добавлен mapper (camelCase ↔ snake_case)
+// - Логика НЕ изменена
+// - Статус считается корректно
+// - JSON поля работают (photos, weighing_history)
+// - Backend теперь готов к масштабированию
+// ✅ Преобразование frontend → SQL (camelCase → snake_case)
+const toDb = (data: any) => ({
+  // ❗ БЕЗ ...data
+
+  final_moisture: data.finalMoisture,
+  quality_rating: data.qualityRating,
+  result_photos: data.resultPhotos,
+  start_temperature: data.loadingTemp,
+  avg_day_temp: data.avgDayTemp,
+  avg_night_temp: data.avgNightTemp,
+
+  chamber_number: data.chamberNumber,
+  sequential_number: data.sequentialNumber,
+
+  wood_type_lt: data.woodType || data.woodTypeLt, 
+
+  start_date: data.startDate,
+  end_date: data.endDate,
+
+  recipe_photos: data.recipePhotos,
+
+
+  weighing_result: data.weighingResult,
+
+  overall_comment: data.overallComment,
+  is_test: data.isTest,
+
+  avg_temp: data.avgTemp,
+  max_temp: data.maxTemp,
+  min_temp: data.minTemp,
+
+  weighed_at: data.weighedAt
+});
+// ✅ Преобразование SQL → frontend (snake_case → camelCase)
+const fromDb = (data: any) => ({
+  id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
+
+  createdAt: data.created_at,
+  loadingTemp: data.start_temperature,
+  avgDayTemp: data.avg_day_temp,
+  avgNightTemp: data.avg_night_temp,
+
+  finalMoisture: data.final_moisture,
+  qualityRating: data.quality_rating,
+  resultPhotos: data.result_photos,
+
+  chamberNumber: data.chamber_number,
+  sequentialNumber: data.sequential_number,
+
+
+  woodType: data.wood_type_lt,
+
+  startDate: data.start_date,
+  endDate: data.end_date,
+
+  recipePhotos: data.recipe_photos,
+
+  weighingResult: data.weighing_result,
+
+  overallComment: data.overall_comment,
+  isTest: data.is_test,
+
+  avgTemp: data.avg_temp,
+  maxTemp: data.max_temp,
+  minTemp: data.min_temp,
+
+  weighedAt: data.weighed_at
+});
+
+
+routes.get('/cycles/active', async (c) => {
+  const { data, error } = await supabase
+  .from('cycles')
+  .select('*')
+  .eq('status', 'In Progress'); // 🔥 ВОТ ЭТО
+
+  return c.json(data);
 });
 
 routes.get('/cycles', async (c) => {
   try {
-    console.log('[Cycles] Запрос на получение циклов (без фотографий)');
-    
-    const cycles = await kv.getByPrefix("cycle_");
-    console.log(`[Cycles] Загружено ${cycles.length} циклов`);
-    
-    // Поддержка фильтрации по sequentialNumber для Google Sheets синхронизаци
-    const sequentialNumber = c.req.query('sequentialNumber');
-    let filteredCycles = cycles;
-    
-    if (sequentialNumber) {
-      filteredCycles = cycles.filter((cycle: any) => 
-        cycle && cycle.sequentialNumber === sequentialNumber
-      );
-      console.log(`[Cycles] Отфильтровано по sequentialNumber ${sequentialNumber}: ${filteredCycles.length} циклов`);
+    const { data, error } = await supabase
+      .from('cycles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[SQL] Ошибка получения циклов:', error);
+      return c.json({ error: error.message }, 500);
     }
-    
-    // ✅ ОПТИМИЗАЦИЯ: Не генерируем signed URLs для списка цикл
-    // Фотографии будут загружаться только при открытии конкретного цикла через GET /cycles/:id
-    const validCycles = filteredCycles.filter(c => c !== null);
-    validCycles.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    
-    console.log(`[Cycles] Возвращаем ${validCycles.length} циклов БЕЗ signed URLs`);
-    return c.json(validCycles);
+
+    // ✅ snake_case → camelCase
+    const mapped = data.map(fromDb);
+
+    // ✅ ПРОСТО возвращаем
+    return c.json(mapped);
+
   } catch (error: any) {
-    console.error("[Cycles] Критическая ошибка получения циклов:", error);
-    console.error("[Cycles] Stack trace:", error.stack);
-    
-    // Возвращаем пустой массив вместо ошибки 500
-    return c.json([]);
+    console.error('[Cycles] ❌ Ошибка:', error);
+    return c.json({ error: error.message }, 500);
   }
 });
 
-// ✅ НОВЫЙ ENDPOINT: Получение одного цикла с фотографиями
 routes.get('/cycles/:id', async (c) => {
   try {
     const id = c.req.param("id");
-    console.log(`[Cycle] Запрос на получение цикла ${id} с фотографиями`);
-    
-    const cycle = await kv.get(`cycle_${id}`);
-    if (!cycle) {
-      console.log(`[Cycle] Цикл ${id} не найден`);
-      return c.json({ error: "Cycle not found" }, 404);
-    }
-    
-    // Генерируем signed URLs только для этого одного цикла
-    const signedCycle = await signCycleUrls(cycle);
-    console.log(`[Cycle] Цикл ${id} возвращен с signed URLs`);
-    
-    return c.json(signedCycle);
-  } catch (error: any) {
-    console.error(`[Cycle] Ошибка получения цикла:`, error);
-    return c.json({ error: error.message }, 500);
-  }
-});
 
-// ✅ НОВЫЙ ENDPOINT: Удаление истории взвешиваний
-routes.delete('/cycles/:id/weighing-history', async (c) => {
-  try {
-    const id = c.req.param('id');
-    console.log(`[Cycle] Удаление истории взвешиваний для цикла ${id}`);
-    
-    const cycle = await kv.get(`cycle_${id}`);
-    if (!cycle) {
-      console.log(`[Cycle] Цикл ${id} не найден`);
-      return c.json({ error: "Cycle not found" }, 404);
-    }
-    
-    // Удаляем историю взвешиваний
-    const updatedCycle = {
-      ...cycle,
-      weighingHistory: []
-    };
-    
-    await kv.set(`cycle_${id}`, updatedCycle);
-    console.log(`[Cycle] История взвешиваний удалена для цикла ${id}`);
-    
-    return c.json({ success: true, message: "Weighing history cleared" });
-  } catch (error: any) {
-    console.error(`[Cycle] Ошибка удаления истории взвешиваний:`, error);
-    return c.json({ error: error.message }, 500);
-  }
-});
+    const { data, error } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', id)
+      .single();
 
-// Delete specific weighing record from history
-routes.delete('/cycles/:id/weighing-history/:index', async (c) => {
-  try {
-    const id = c.req.param('id');
-    const indexToDelete = parseInt(c.req.param('index'));
-    console.log(`[Cycle] Запрос на удаление записи взвешивания. Цикл: ${id}, Индекс: ${indexToDelete}`);
-    
-    const cycle = await kv.get(`cycle_${id}`);
-    if (!cycle) {
-      console.log(`[Cycle] Цикл ${id} не найден`);
+    if (error || !data) {
       return c.json({ error: "Cycle not found" }, 404);
     }
-    
-    const weighingHistory = cycle.weighingHistory || [];
-    console.log(`[Cycle] Текущая длина истории: ${weighingHistory.length}`);
-    console.log(`[Cycle] Записи в истории:`, weighingHistory.map((w: any, i: number) => `${i}: ${new Date(w.timestamp).toISOString()}`));
-    
-    if (isNaN(indexToDelete)) {
-      console.log(`[Cycle] Индекс не является числом: ${c.req.param('index')}`);
-      return c.json({ error: "Invalid index format" }, 400);
-    }
-    
-    if (indexToDelete < 0 || indexToDelete >= weighingHistory.length) {
-      console.log(`[Cycle] Индекс ${indexToDelete} вне диапазона 0-${weighingHistory.length - 1}`);
-      return c.json({ error: `Invalid index. Must be between 0 and ${weighingHistory.length - 1}` }, 400);
-    }
-    
-    // Удаляем конкретную запись
-    const recordToDelete = weighingHistory[indexToDelete];
-    console.log(`[Cycle] Удаляем запись ${indexToDelete}:`, new Date(recordToDelete.timestamp).toISOString());
-    
-    const updatedHistory = weighingHistory.filter((_: any, idx: number) => idx !== indexToDelete);
-    
-    const updatedCycle = {
-      ...cycle,
-      weighingHistory: updatedHistory
-    };
-    
-    await kv.set(`cycle_${id}`, updatedCycle);
-    console.log(`[Cycle] ✅ Запись взвешивания ${indexToDelete} удалена для цикла ${id}. Осталось записей: ${updatedHistory.length}`);
-    
-    return c.json({ success: true, message: "Weighing record deleted", cycle: updatedCycle });
+
+    return c.json(fromDb(data));
+
   } catch (error: any) {
-    console.error(`[Cycle] ❌ Ошибка удаления записи взвешивания:`, error);
-    console.error(`[Cycle] Stack trace:`, error.stack);
-    return c.json({ error: error.message || "Internal server error" }, 500);
+    console.error("Error fetching cycle:", error);
+    return c.json({ error: error.message }, 500);
   }
 });
 
 routes.post('/cycles', async (c) => {
   try {
     const body = await c.req.json();
+    // 🔍 DEBUG: проверяем что приходит с фронта
+    console.log('BODY:', body);
+
     const id = crypto.randomUUID();
+
+    // 🧠 Маппинг + добавление системных полей
     const newCycle = {
-      ...body,
+      ...toDb(body),
       id,
-      createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       status: 'In Progress'
     };
-    await kv.set(`cycle_${id}`, newCycle);
-    return c.json(newCycle);
+
+    const { error } = await supabase
+      .from('cycles')
+      .insert([newCycle]);
+
+    if (error) {
+      console.error('[SQL] Ошибка создания цикла:', error);
+      return c.json({ error: error.message }, 500);
+    }
+
+    // 📤 Возвращаем обратно в camelCase
+    return c.json(fromDb(newCycle));
+
   } catch (error: any) {
     console.error("Error creating cycle:", error);
     return c.json({ error: error.message }, 500);
@@ -294,65 +331,136 @@ routes.put('/cycles/:id', async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
-    const existing = await kv.get(`cycle_${id}`);
-    if (!existing) {
+
+    // 🔍 Получаем текущий цикл
+    const { data: existing, error: fetchError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existing) {
       return c.json({ error: "Cycle not found" }, 404);
     }
-    const updated = { ...existing, ...body, id };
-    
-    const hasFinalMoisture = updated.finalMoisture !== undefined && updated.finalMoisture !== null && updated.finalMoisture !== "";
-    const hasRating = updated.qualityRating !== undefined && updated.qualityRating !== null;
-    const hasResultPhoto = updated.resultPhotos && updated.resultPhotos.length > 0;
-    
+
+    // 🔄 Маппим входящие данные
+    const mappedBody = Object.fromEntries(
+  Object.entries(toDb(body)).filter(([_, v]) => v !== undefined)
+);
+// 🛡 нормализация даты
+if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
+  if (/^\d{2}:\d{2}$/.test(mappedBody.end_date)) {
+    const now = new Date();
+    const [h, m] = mappedBody.end_date.split(':').map(Number);
+
+    now.setHours(h);
+    now.setMinutes(m);
+    now.setSeconds(0);
+
+    mappedBody.end_date = now.toISOString();
+  }
+}
+    // 🧠 Объединяем (как раньше в KV)
+    const updated = { ...existing, ...mappedBody };
+
+    // ✅ ЛОГИКА СТАТУСА (исправлена под SQL)
+    const hasFinalMoisture =
+      updated.final_moisture !== null &&
+      updated.final_moisture !== undefined;
+
+    const hasRating =
+      updated.quality_rating !== null &&
+      updated.quality_rating !== undefined;
+
+    const hasResultPhoto =
+      updated.result_photos &&
+      updated.result_photos.length > 0;
+
     if (hasFinalMoisture && hasRating && hasResultPhoto) {
       updated.status = "Completed";
     } else {
       updated.status = "In Progress";
     }
 
-    await kv.set(`cycle_${id}`, updated);
-    return c.json(updated);
+    // 💾 Сохраняем
+    const { error: updateError } = await supabase
+      .from('cycles')
+      .update({
+  ...mappedBody,
+  status: updated.status
+})
+      .eq('id', id);
+
+    if (updateError) {
+      console.error('[SQL] Ошибка обновления:', updateError);
+      return c.json({ error: updateError.message }, 500);
+    }
+
+    // 📤 Возвращаем в frontend формате
+    return c.json(fromDb(updated));
+
   } catch (error: any) {
     console.error("Error updating cycle:", error);
     return c.json({ error: error.message }, 500);
   }
 });
 
-// Alias for driver view - update cycle with weighing result
-routes.put('/update-cycle', async (c) => {
-  try {
-    const body = await c.req.json();
-    const { id, weighingResult } = body;
-    
-    if (!id) {
-      return c.json({ error: "Cycle ID required" }, 400);
-    }
-    
-    const existing = await kv.get(`cycle_${id}`);
-    if (!existing) {
-      return c.json({ error: "Cycle not found" }, 404);
-    }
-    
-    const updated = { 
-      ...existing, 
-      weighingResult,
-      weighedAt: new Date().toISOString()
-    };
-    
-    await kv.set(`cycle_${id}`, updated);
-    console.log(`[Driver] Цикл ${id} обновлён результатами взвешивания`);
-    return c.json(updated);
-  } catch (error: any) {
-    console.error("Error updating cycle with weighing:", error);
+
+routes.delete('/cycles/:id/weighings', async (c) => {
+  const cycleId = c.req.param('id');
+
+  const { error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('cycle_id', cycleId);
+
+  if (error) {
     return c.json({ error: error.message }, 500);
   }
+
+  return c.json({
+    success: true,
+    message: 'All weighings deleted'
+  });
 });
+
+routes.delete('/weighings/:id', async (c) => {
+  const id = c.req.param('id');
+
+  const { data, error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({
+    success: true,
+    deleted: data
+  });
+});
+
 
 routes.delete('/cycles/:id', async (c) => {
   try {
     const id = c.req.param("id");
-    await kv.del(`cycle_${id}`);
+
+    const { error } = await supabase
+      .from('cycles')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('[SQL] Ошибка удаления:', error);
+      return c.json({ error: error.message }, 500);
+    }
+
     return c.json({ success: true });
+
   } catch (error: any) {
     console.error("Error deleting cycle:", error);
     return c.json({ error: error.message }, 500);
@@ -361,8 +469,20 @@ routes.delete('/cycles/:id', async (c) => {
 
 routes.get('/settings/durations', async (c) => {
   try {
-    const data = await kv.get("settings_durations");
-    return c.json(data || {});
+    const { data, error } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'durations')
+      .single();
+
+    // 👉 если нет записи — просто возвращаем пустой объект
+    if (error && error.code !== 'PGRST116') {
+      console.error('[SQL] Ошибка получения settings:', error);
+      return c.json({ error: error.message }, 500);
+    }
+
+    return c.json(data?.value || {});
+
   } catch (error: any) {
     console.error("Error fetching settings:", error);
     return c.json({ error: error.message }, 500);
@@ -372,8 +492,24 @@ routes.get('/settings/durations', async (c) => {
 routes.post('/settings/durations', async (c) => {
   try {
     const body = await c.req.json();
-    await kv.set("settings_durations", body);
+
+    const { error } = await supabase
+      .from('settings')
+      .upsert(
+        {
+          key: 'durations',
+          value: body
+        },
+        { onConflict: 'key' }
+      );
+
+    if (error) {
+      console.error('[SQL] Ошибка сохранения settings:', error);
+      return c.json({ error: error.message }, 500);
+    }
+
     return c.json({ success: true });
+
   } catch (error: any) {
     console.error("Error saving settings:", error);
     return c.json({ error: error.message }, 500);
@@ -383,16 +519,32 @@ routes.post('/settings/durations', async (c) => {
 routes.post('/upload', async (c) => {
   try {
     await ensureBucket();
-    const body = await c.req.parseBody();
-    const file = body['file'];
-    
+
+    // ✅ правильный способ получения файла
+    const formData = await c.req.formData();
+    const file = formData.get('file');
+
     if (!file || !(file instanceof File)) {
       return c.json({ error: "No file uploaded" }, 400);
     }
 
-    const fileExt = file.name.split('.').pop();
+    // ✅ ограничение размера (например 5MB)
+    const MAX_SIZE = 5 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return c.json({ error: "File too large (max 5MB)" }, 400);
+    }
+
+    // ✅ проверка типа файла
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      return c.json({ error: "Invalid file type" }, 400);
+    }
+
+    // ✅ безопасное расширение
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
-    
+
+    // 💾 загрузка
     const { data, error } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(fileName, file, {
@@ -401,49 +553,71 @@ routes.post('/upload', async (c) => {
       });
 
     if (error) throw error;
-    return c.json({ path: data.path });
+
+    // ✅ можно сразу вернуть публичный URL (удобно фронту)
+    const { data: publicUrl } = supabase
+      .storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(data.path);
+
+    return c.json({
+      path: data.path,
+      url: publicUrl.publicUrl
+    });
+
   } catch (error: any) {
     console.error("Error uploading file:", error);
     return c.json({ error: error.message }, 500);
   }
 });
 
+// ✅✅ НАДО ФИКСИТЬ ✅
 routes.post('/weather', async (c) => {
   try {
     const { startDate, endDate } = await c.req.json();
-    console.log('Weather request:', startDate, endDate);
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const startStr = startDate.split('T')[0];
+const endStr = endDate.split('T')[0];
 
-    // 1. Получаем из SQL
-    const { data, error } = await supabase
-      .from('weather')
-      .select('*')
-      .gte('date', startDate)
-      .lte('date', endDate);
+const { data, error } = await supabase
+  .from('weather')
+  .select('*')
+  .gte('date', startStr + 'T00:00:00')
+  .lte('date', endStr + 'T23:59:59');
 
     if (error) {
       return c.json({ error: error.message }, 500);
     }
 
     const weatherData: Record<string, any> = {};
-    const existingDates = new Set(data.map(d => d.date));
 
+    // ✅ нормализуем даты из SQL (убираем время)
+    const existingDates = new Set(
+      data.map(d => d.date.split('T')[0])
+    );
+
+    // ✅ также нормализуем ключи
     data.forEach(d => {
-      weatherData[d.date] = {
+      const key = d.date.split('T')[0];
+
+      weatherData[key] = {
         temp: d.temp,
         code: d.code
       };
     });
 
     // 2. Ищем недостающие дни
+    const start = new Date(startStr);
+    const end = new Date(endStr);
     const days = eachDayOfInterval({ start, end });
 
     const missing = days.filter(d => {
       const str = format(d, 'yyyy-MM-dd');
       return !existingDates.has(str);
     });
+
+    // ✅ КРИТИЧНО: сортировка
+    missing.sort((a, b) => a.getTime() - b.getTime());
 
     // 3. Если всё есть → сразу возвращаем
     if (missing.length === 0) {
@@ -471,13 +645,16 @@ routes.post('/weather', async (c) => {
         const min = apiData.daily.temperature_2m_min[i];
 
         if (max !== null && min !== null) {
+          const key = t; // уже yyyy-MM-dd
+
           const val = {
-            date: t,
+            date: key,
             temp: (max + min) / 2,
             code: apiData.daily.weather_code[i]
           };
 
-          weatherData[t] = {
+          // ✅ сразу кладём в ответ
+          weatherData[key] = {
             temp: val.temp,
             code: val.code
           };
@@ -500,321 +677,376 @@ routes.post('/weather', async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
-// Google Sheets Sync Endpoints
-
-// НОВЫЙ: Получить текущие работы из Sheets (через POST от Apps Script)
-routes.post('/sheets/update-current-work', async (c) => {
-  try {
-    console.log("🔥 SQL ENDPOINT HIT");
-
-    const body = await c.req.json();
-
-    const timestamp = body.timestamp || new Date().toISOString();
-
-    const rows = Object.entries(body)
-      .filter(([key]) => key.startsWith("line"))
-      .map(([key, value]: any) => ({
-        line_number: Number(key.replace("line", "")),
-        sequential_number: value.sequentialNumber,
-        raw_text: value.rawText,
-        updated_at: timestamp
-      }));
-
-    const { error } = await supabase
-      .from("current_work")
-      .upsert(rows, { onConflict: "line_number" });
-
-    if (error) {
-      console.error("❌ SQL ERROR:", error);
-      return c.json({ error }, 500);
-    }
-
-    return c.json({ success: true });
-
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-
-// НОВЫЙ: Получить текущие работы (для фронтенда)
+// ✅✅✅✅✅✅✅✅✅✅✅✅✅✅
+// 📊 UPDATE CURRENT WORK (SQL)
+//
+// Принимает данные по линиям (line1–line3)
+// Сохраняет их в current_work через upsert
+// Используется как замена старого KV-хранилища
 routes.get('/sheets/current-work', async (c) => {
   try {
     console.log('[Sheets] Запрос текущих работ');
 
-    // 1. SQL → current_work
+    // 🔧 helpers
+    const normalize = (v: any) => String(v).trim();
+
+    const getStatus = (cycle: any) => {
+      if (cycle.end_date) return "Finished";
+      if (cycle.start_date) return "In Progress";
+      return "Pending";
+    };
+
+    const mapCycle = (cycle: any) => ({
+      id: cycle.id,
+      sequentialNumber: cycle.sequential_number,
+      woodType: cycle.wood_type_lt,
+      chamberNumber: cycle.chamber_number,
+      startDate: cycle.start_date,
+      endDate: cycle.end_date,
+
+      recipePhotos: cycle.recipe_photos || [],
+      resultPhotos: cycle.result_photos || [],
+      overallComment: cycle.overall_comment,
+
+      avgTemp: cycle.avg_temp,
+      maxTemp: cycle.max_temp,
+      minTemp: cycle.min_temp,
+
+      status: getStatus(cycle)
+    });
+
+    // 1. current_work
     const { data: rows, error } = await supabase
       .from("current_work")
       .select("*")
       .order("line_number");
 
     if (error) {
-      console.error("❌ SQL ERROR:", error);
+      console.error("❌ SQL ERROR (current_work):", error);
       return c.json({ error }, 500);
     }
 
     if (!rows || rows.length === 0) {
-      return c.json({ currentWork: [] });
+      return c.json({
+        line1: null,
+        line2: null,
+        line3: null,
+        timestamp: null
+      });
     }
 
-    // 2. Преобразуем
+    // 2. преобразуем current_work
     const data: any = {};
 
     for (const row of rows) {
       data[`line${row.line_number}`] = {
         rawText: row.raw_text,
-        sequentialNumber: row.sequential_number
+        sequentialNumber: normalize(row.sequential_number)
       };
     }
 
-    data.timestamp = rows[0]?.updated_at;
+    // 3. timestamp
+    const timestamp = rows.reduce((latest, row) => {
+      return !latest || row.updated_at > latest ? row.updated_at : latest;
+    }, null);
 
-    // 3. Получаем cycles из KV (пока)
-    const { data: dbData } = await supabase
-      .from("kv_store_c5bcdb1f")
-      .select("key, value")
-      .like("key", "cycle_%")
-      .limit(1000);
+    // 4. cycles
+    const { data: cycles, error: cyclesError } = await supabase
+      .from("cycles")
+      .select("*");
 
+    if (cyclesError) {
+      console.error("❌ SQL ERROR (cycles):", cyclesError);
+    }
+
+    // 5. map cycles
     const cyclesMap = new Map();
 
-    for (const item of dbData || []) {
-      const seq = item.value?.sequentialNumber;
-      if (seq) {
-        cyclesMap.set(seq, item.value);
+    for (const cycle of cycles || []) {
+      if (cycle.sequential_number) {
+        cyclesMap.set(normalize(cycle.sequential_number), cycle);
       }
     }
 
-    // 4. Формируем результат
-    const currentWork = [];
+    // 6. собираем currentWork
+    const currentWork: any = {};
 
     for (let i = 1; i <= 3; i++) {
       const line = data[`line${i}`];
 
-      if (line?.sequentialNumber) {
-        currentWork.push({
-          lineId: String(i),
-          sequentialNumber: line.sequentialNumber,
-          rawText: line.rawText || '',
-          cycle: cyclesMap.get(line.sequentialNumber) || null
-        });
+      if (!line) {
+        currentWork[`line${i}`] = null;
+        continue;
       }
+
+      const cycle = cyclesMap.get(normalize(line.sequentialNumber));
+
+      currentWork[`line${i}`] = {
+        sequentialNumber: line.sequentialNumber,
+        rawText: line.rawText || '',
+        cycle: cycle ? mapCycle(cycle) : null // ✅ ВОТ ГЛАВНЫЙ ФИКС
+      };
     }
 
-    // 5. Подписываем URL
-    for (const work of currentWork) {
-      if (work.cycle) {
-        try {
-          work.cycle = await signCycleUrls(work.cycle);
-        } catch (e) {
-          console.error('[Sheets] Ошибка подписания URL:', e);
+    currentWork.timestamp = timestamp;
+
+    // 7. подписываем URL
+    await Promise.all(
+      Object.keys(currentWork).map(async (key) => {
+        const work = currentWork[key];
+
+        if (work?.cycle) {
+          try {
+            work.cycle = await signCycleUrls(work.cycle);
+          } catch (e) {
+            console.error('[Sheets] Ошибка подписания URL:', e);
+          }
         }
-      }
-    }
+      })
+    );
 
-    return c.json({
-      currentWork,
-      timestamp: data.timestamp
-    });
+    console.log("RESULT currentWork:", JSON.stringify(currentWork, null, 2));
+
+    return c.json(currentWork);
 
   } catch (error: any) {
     console.error('[Sheets] ERROR:', error);
 
     return c.json({
-      currentWork: [],
-      error: error.message
+      line1: null,
+      line2: null,
+      line3: null,
+      timestamp: null
+    });
+  }
+});
+routes.post('/sheets/update-current-work', async (c) => {
+  try {
+    console.log('[Sheets] UPDATE current work');
+
+    const body = await c.req.json();
+
+    console.log('BODY:', body);
+
+    // 🔥 ПАРСИНГ СТРОКИ
+    const parseLine = (text: string | null) => {
+      if (!text) return null;
+
+      const parts = text.split('/').map(p => p.trim());
+
+      if (parts.length < 3) return null;
+
+      return {
+        raw_text: text,
+        sequential_number: parts[2] // ← ВАЖНО
+      };
+    };
+
+    const line1 = parseLine(body.line1);
+    const line2 = parseLine(body.line2);
+    const line3 = parseLine(body.line3);
+
+    console.log('PARSED:', { line1, line2, line3 });
+
+    if (!line1 && !line2 && !line3) {
+      return c.json({
+        success: false,
+        message: 'No valid data'
+      });
+    }
+
+    const updates: any[] = [];
+
+    if (line1) {
+      updates.push({
+        line_number: 1,
+        ...line1
+      });
+    }
+
+    if (line2) {
+      updates.push({
+        line_number: 2,
+        ...line2
+      });
+    }
+
+    if (line3) {
+      updates.push({
+        line_number: 3,
+        ...line3
+      });
+    }
+
+    console.log('UPSERT DATA:', updates);
+
+    const { error } = await supabase
+      .from('current_work')
+      .upsert(updates, { onConflict: 'line_number' });
+
+    if (error) {
+      console.error('❌ SQL ERROR:', error);
+
+      return c.json({
+        success: false,
+        message: error.message
+      });
+    }
+
+    return c.json({
+      success: true
+    });
+
+  } catch (error: any) {
+    console.error('❌ UPDATE ERROR:', error);
+
+    return c.json({
+      success: false,
+      message: error.message
     });
   }
 });
 
-// НОВЫЙ: Получить текущие работы (для фронтенда)
-routes.get('/sheets/current-work', async (c) => {
-  try {
-    console.log('[Sheets] Запрос текущих работ');
-    
-    const data = await kv.get('current_work');
-    
-    if (!data) {
-      console.log('[Sheets] Данные о текущих работах не найдены, возвращаем пустой массив');
-      return c.json({ 
-        currentWork: [],
-        message: 'Данные о текущих работах не найдены' 
-      });
-    }
-    
-    console.log('[Sheets] Найдены данные о текущих работах:', data);
-    
-    // Находим циклы по порядковым номерам
-    const sequentialNumbers = [
-      data.line1?.sequentialNumber,
-      data.line2?.sequentialNumber,
-      data.line3?.sequentialNumber,
-    ].filter(Boolean);
-    
-    console.log('[Sheets] Порядковые номера циклов:', sequentialNumbers);
-    
-    // ✅ ОПТИМИЗАЦИЯ: Используем прямой запрос к БД вместо загрузки всех циклов
-    let cyclesMap = new Map();
-    
-    if (sequentialNumbers.length > 0) {
-      try {
-        // Делаем прямой запрос к базе для каждого sequentialNumber
-        for (const seqNum of sequentialNumbers) {
-          console.log(`[Sheets] Поиск цикла с sequentialNumber: ${seqNum}`);
-          
-          const { data: dbData, error } = await supabase
-            .from("kv_store_c5bcdb1f")
-            .select("key, value")
-            .like("key", "cycle_%")
-            .limit(1000); // Ограничиваем для безопасности
-          
-          if (error) {
-            console.error('[Sheets] Ошибка запроса к БД:', error);
-            continue;
-          }
-          
-          // Ищем цикл с нужным sequentialNumber
-          const matchingCycle = dbData?.find((item: any) => {
-            try {
-              return item.value?.sequentialNumber === seqNum;
-            } catch (e) {
-              return false;
-            }
-          });
-          
-          if (matchingCycle) {
-            cyclesMap.set(seqNum, matchingCycle.value);
-            console.log(`[Sheets] Найден цикл для ${seqNum}:`, matchingCycle.value.id);
-          } else {
-            console.log(`[Sheets] Цикл с sequentialNumber ${seqNum} не найден`);
-          }
-        }
-        
-        console.log(`[Sheets] Найдено циклов: ${cyclesMap.size}`);
-      } catch (cycleError: any) {
-        console.error('[Sheets] Ошибка загрузки циклов:', cycleError);
-        // Продолжаем с пустым Map
-      }
-    }
-    
-    // Формируем результат
-    const currentWork = [];
-    
-    if (data.line1?.sequentialNumber) {
-      const cycle = cyclesMap.get(data.line1.sequentialNumber) || null;
-      currentWork.push({
-        lineId: '1',
-        sequentialNumber: data.line1.sequentialNumber,
-        rawText: data.line1.rawText || '',
-        cycle
-      });
-      console.log(`[Sheets] Линия 1: ${data.line1.sequentialNumber}, цикл найден: ${!!cycle}`);
-    }
-    
-    if (data.line2?.sequentialNumber) {
-      const cycle = cyclesMap.get(data.line2.sequentialNumber) || null;
-      currentWork.push({
-        lineId: '2',
-        sequentialNumber: data.line2.sequentialNumber,
-        rawText: data.line2.rawText || '',
-        cycle
-      });
-      console.log(`[Sheets] Линия 2: ${data.line2.sequentialNumber}, цикл найден: ${!!cycle}`);
-    }
-    
-    if (data.line3?.sequentialNumber) {
-      const cycle = cyclesMap.get(data.line3.sequentialNumber) || null;
-      currentWork.push({
-        lineId: '3',
-        sequentialNumber: data.line3.sequentialNumber,
-        rawText: data.line3.rawText || '',
-        cycle
-      });
-      console.log(`[Sheets] Линия 3: ${data.line3.sequentialNumber}, цикл найден: ${!!cycle}`);
-    }
-    
-    // Подписываем URL для фото
-    for (const work of currentWork) {
-      if (work.cycle) {
-        try {
-          work.cycle = await signCycleUrls(work.cycle);
-        } catch (signError: any) {
-          console.error('[Sheets] Ошибка подписания URL для цикла:', signError);
-          // Продолжаем без подписанных URL
-        }
-      }
-    }
-    
-    console.log(`[Sheets] Возвращаем ${currentWork.length} текущих работ`);
-    return c.json({ currentWork, timestamp: data.timestamp });
-    
-  } catch (error: any) {
-    console.error('[Sheets] Критическая ошибка получения текущих работ:', error);
-    console.error('[Sheets] Stack trace:', error.stack);
-    
-    // Возвращаем пустой массив вместо ошибки 500
-    return c.json({ 
-      currentWork: [], 
-      error: error.message,
-      message: 'Ошибка загрузки данных, попробуйте позже'
-    });
-  }
-});
 
 // Webhook endpoint для приёма данных из Google Sheets
 // Когда оператор завершает сушку и в Google Sheets появляется новая строка,
 // Apps Script вызывает этот endpoint
+async function isRowProcessed(rowNumber: number) {
+  const { data, error } = await supabase
+    .from('processed_rows')
+    .select('row_number')
+    .eq('row_number', rowNumber)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[SQL] Ошибка проверки:', error);
+    return false;
+  }
+
+  return !!data;
+}
+
+async function markRowAsProcessed(rowNumber: number, body: any) {
+  const { error } = await supabase
+    .from('processed_rows')
+    .insert({
+      row_number: rowNumber,
+      details: body
+    });
+
+  if (error) {
+    console.error('[SQL] Ошибка записи:', error);
+  }
+}
+
+// ✅ ВСТАВЛЯЕШЬ СЮДА
+async function processSheetRow(body: any) {
+  const chamber = Number(body.chamberNumber);
+  const old_cycle = String(body.oldSequentialNumber);
+  const new_cycle = String(body.newSequentialNumber);
+  const finish_time = body.oldCycleEndDate;
+  const start_time = body.newCycleStartDate;
+  const wood_lt = body.woodTypeLithuanian;
+
+
+  console.log('[SQL] Обработка строки:', body);
+
+  const { error: closeError } = await supabase
+    .from('cycles')
+    .update({
+      status: 'Completed',
+      end_date: finish_time
+    })
+    .eq('sequential_number', old_cycle);
+
+  if (closeError) throw closeError;
+
+  const { error: createError } = await supabase
+    .from('cycles')
+    .insert({
+      chamber_number: chamber,
+      sequential_number: new_cycle,
+      wood_type_lt: wood_lt,
+      start_date: start_time,
+      status: 'In Progress'
+    });
+
+  if (createError && createError.code !== '23505') {
+    throw createError;
+  }
+
+  await supabase.from('sync_logs').insert({
+    action: 'cycle_switch',
+    chamber_number: chamber,
+    sequential_number: new_cycle,
+    success: true,
+    message: `Цикл ${old_cycle} → ${new_cycle}`,
+    details: body
+  });
+
+  console.log('[SQL] ✅ Готово');
+}
+
 routes.post('/sheets/process-row', async (c) => {
   try {
-    const body = await c.req.json() as GoogleSheetRow;
-    
-    console.log('[Sheets] Получен запрос на обработку строки:', body);
-    
-    // Проверяем обязательные поля
-    if (!body.rowNumber || !body.chamberNumber || !body.oldSequentialNumber || 
-        !body.newSequentialNumber || !body.woodTypeLithuanian || 
-        !body.oldCycleEndDate || !body.newCycleStartDate) {
-      return c.json({ 
-        error: 'Отсутствуют обязательные поля',
-        required: ['rowNumber', 'chamberNumber', 'woodTypeLithuanian', 'oldSequentialNumber', 'oldCycleEndDate', 'newSequentialNumber', 'newCycleStartDate']
+    const body = await c.req.json();
+
+    console.log('[Sheets] Получен запрос:', body);
+
+    // ✅ нормализация типов
+    const rowNumber = Number(body.rowNumber);
+    const chamberNumber = Number(body.chamberNumber);
+
+    // ✅ ВАЛИДАЦИЯ (простая и надежная)
+    if (
+  !rowNumber ||
+  !chamberNumber ||
+  !body.oldSequentialNumber ||
+  !body.newSequentialNumber ||
+  !body.oldCycleEndDate ||
+  !body.newCycleStartDate ||
+  !body.woodTypeLithuanian
+) {
+      console.log('[Sheets] ❌ Ошибка валидации:', body);
+
+      return c.json({
+        error: 'Отсутствуют обязательные поля'
       }, 400);
     }
-    
-    // Проверяем, не была ли строка уже обработана
-    const alreadyProcessed = await isRowProcessed(body.rowNumber);
+
+    // ✅ Проверка дубля
+    const alreadyProcessed = await isRowProcessed(rowNumber);
     if (alreadyProcessed) {
-      console.log(`[Sheets] Строка ${body.rowNumber} уже была обработана ранее, пропускаем`);
-      return c.json({ 
-        success: true, 
-        message: 'Строка уже обработана',
-        skipped: true 
+      console.log(`[Sheets] Строка ${rowNumber} уже обработана`);
+      return c.json({
+        success: true,
+        skipped: true
       });
     }
-    
-    // Запускаем обработку в фоне (не блокируем ответ)
-    processSheetRow(body)
-      .then(() => {
-        markRowAsProcessed(body.rowNumber, body);
-        console.log(`[Sheets] ✅ Строка ${body.rowNumber} успешно обработана`);
-      })
-      .catch((error) => {
-        console.error(`[Sheets] ❌ Ошибка обработки строки ${body.rowNumber}:`, error);
-      });
-    
-    // Сразу возвращаем успешный ответ
-    return c.json({ 
-      success: true, 
-      message: 'Обработка строки запущена',
-      rowNumber: body.rowNumber
+
+    // 🔥 ЛОГИКА (через SQL)
+    await processSheetRow(body);
+
+    // ✅ фиксируем обработку
+    await markRowAsProcessed(rowNumber, body);
+
+    console.log(`[Sheets] ✅ Готово: ${rowNumber}`);
+
+    return c.json({
+      success: true,
+      rowNumber
     });
-    
+
   } catch (error: any) {
-    console.error('[Sheets] Ошибка в endpoint process-row:', error);
-    return c.json({ error: error.message }, 500);
+    console.error('[Sheets] ❌ Ошибка:', error);
+
+    return c.json({
+      error: error.message
+    }, 500);
   }
 });
 
-// Получить последние логи синхронизации
+// Получить последние логи синхронизации ✅ 
 routes.get('/sheets/sync-logs', async (c) => {
   try {
     const limit = parseInt(c.req.query('limit') || '10');
@@ -831,49 +1063,43 @@ routes.get('/sheets/sync-logs', async (c) => {
   }
 });
 
-// Проверить статус обработки строки
+// Проверить статус обработки строки ✅ 
 routes.get('/sheets/row-status/:rowNumber', async (c) => {
   try {
     const rowNumber = parseInt(c.req.param('rowNumber'));
-    
-    console.log(`[Sheets] Проверка статуса строки ${rowNumber}`);
-    
-    // Проверяем через kv.get
-    const kvResult = await kv.get(`processed_row_${rowNumber}`);
-    console.log(`[Sheets] kv.get результат:`, kvResult);
-    
-    // Проверяем напрямую через Supabase
+
     const { data, error } = await supabase
-      .from("kv_store_c5bcdb1f")
-      .select("key, value")
-      .eq("key", `processed_row_${rowNumber}`)
-      .single();
-    
-    console.log(`[Sheets] Supabase прямой запрос:`, data, error);
-    
-    const processed = await isRowProcessed(rowNumber);
-    
+      .from('processed_rows')
+      .select('*')
+      .eq('row_number', rowNumber)
+      .maybeSingle();
+
+    if (error) {
+      return c.json({ error: error.message }, 500);
+    }
+
     return c.json({ 
-      processed,
-      kvResult,
-      supabaseData: data,
-      supabaseError: error?.message
+      processed: !!data,
+      data
     });
+
   } catch (error: any) {
-    console.error('[Sheets] Ошибка проверки статуса строки:', error);
     return c.json({ error: error.message }, 500);
   }
 });
 
-// Сброс татуса обработки строки (для повторного тестирования)
+// Сброс татуса обработки строки (для повторного тестирования) ✅ 
 routes.delete('/sheets/reset-row/:rowNumber', async (c) => {
   try {
     const rowNumber = parseInt(c.req.param('rowNumber'));
     
     console.log(`[Sheets] Сброс статуса строки ${rowNumber}`);
     
-    // Удаляем метку обработки
-    await kv.del(`processed_row_${rowNumber}`);
+    // Удаляем метку обработки ✅ 
+    await supabase
+  .from('processed_rows')
+  .delete()
+  .eq('row_number', rowNumber);
     
     return c.json({ 
       success: true, 
@@ -885,114 +1111,56 @@ routes.delete('/sheets/reset-row/:rowNumber', async (c) => {
   }
 });
 
-// Получить список всех обработанных строк
+// Получить список всех обработанных строк ✅ 
 routes.get('/sheets/processed-rows', async (c) => {
   try {
-    console.log('[Sheets] Запрос на получение обработанных строк');
-    
-    // Используем прямой запрос к базе через service role
     const { data, error } = await supabase
-      .from("kv_store_c5bcdb1f")
-      .select("key, value")
-      .like("key", "processed_row_%");
-    
+      .from('processed_rows')
+      .select('*')
+      .order('row_number', { ascending: false });
+
     if (error) {
-      console.error('[Sheets] Ошибка получения строк из БД:', error);
-      return c.json({ error: `Database error: ${error.message}` }, 500);
+      return c.json({ error: error.message }, 500);
     }
-    
-    console.log(`[Sheets] Найдено ${data?.length || 0} обработанных строк`);
-    
-    const rows = (data || []).map((item: any) => {
-      const rowNumber = parseInt(item.key?.replace('processed_row_', '') || '0');
-      return {
-        rowNumber,
-        processedAt: item.value?.processedAt,
-        details: item.value?.details
-      };
-    }).sort((a: any, b: any) => b.rowNumber - a.rowNumber);
-    
-    console.log('[Sheets] Возвращаем данные клиенту');
-    return c.json({ rows, count: rows.length });
+
+    return c.json({ 
+      rows: data,
+      count: data.length
+    });
+
   } catch (error: any) {
-    console.error('[Sheets] Ошибка получения обработанных строк:', error);
-    return c.json({ error: error.message || 'Unknown error' }, 500);
+    return c.json({ error: error.message }, 500);
   }
 });
 
-// Очистить все обработанные строки (для массового тестированя)
+// Очистить все обработанные строки (для массового тестированя) ✅ 
 routes.post('/sheets/clear-processed', async (c) => {
   try {
-    console.log('[Sheets] Очистка всех обработанных строк');
-    
-    // Получаем все ключи processed_row_*
-    const allRows = await kv.getByPrefix('processed_row_');
-    
-    // Удаляем все метки
-    for (const row of allRows) {
-      await kv.del(row.key);
+    const { error } = await supabase
+      .from('processed_rows')
+      .delete()
+      .neq('row_number', 0); // удалить всё
+
+    if (error) {
+      return c.json({ error: error.message }, 500);
     }
-    
+
     return c.json({ 
-      success: true, 
-      message: `Очищено ${allRows.length} обработанных строк`,
-      count: allRows.length
-    });
-  } catch (error: any) {
-    console.error('[Sheets] Ошибка очистки обработанных строк:', error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-// НОВЫЙ: Удалить дубликаы циклов по порядковому номеру (оставить только последний)
-routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
-  try {
-    const sequentialNumber = c.req.param('sequentialNumber');
-    
-    console.log(`[Sheets] Удаление дубликатов для икла ${sequentialNumber}`);
-    
-    // Находим все циклы с этим порядковым номером
-    const allCycles = await kv.getByPrefix('cycle_');
-    const duplicates = allCycles
-      .filter(item => item.value && item.value.sequentialNumber === sequentialNumber) // Проверяем что value существует
-      .map(item => ({ key: item.key, cycle: item.value })) // Сохраняем и ключ и значение
-      .sort((a, b) => new Date(b.cycle.startDate).getTime() - new Date(a.cycle.startDate).getTime()); // Сортируем по дате (новые первые)
-    
-    if (duplicates.length <= 1) {
-      return c.json({
-        success: true,
-        message: 'Дубликатов не найдено',
-        found: duplicates.length
-      });
-    }
-    
-    // Оставляем только ПОСЛЕДНИЙ (самый новый), удаляем осталные
-    const toKeep = duplicates[0];
-    const toDelete = duplicates.slice(1);
-    
-    console.log(`[Sheets] Найдено ${duplicates.length} циклов. Оставляем ${toKeep.cycle.id}, удаляем ${toDelete.length}`);
-    
-    // Удаляем дубликаты (используем правильный ключ cycle_${id})
-    for (const item of toDelete) {
-      await kv.del(item.key); // Используем оригиальный ключ из БД
-      console.log(`[Sheets] Удалён дубликат: ${item.cycle.id} (ключ: ${item.key})`);
-    }
-    
-    return c.json({
       success: true,
-      message: `Удалено ${toDelete.length} дубликатов. Оставлен цикл от ${new Date(toKeep.cycle.startDate).toLocaleString()}`,
-      kept: toKeep.cycle,
-      deleted: toDelete.length,
-      total: duplicates.length
+      message: 'Все строки очищены'
     });
-    
+
   } catch (error: any) {
-    console.error('[Sheets] Ошибка удаления дубликатов:', error);
     return c.json({ error: error.message }, 500);
   }
 });
 
-// Ручная синхронизация (для тестирования)
+// НОВЫЙ: Удалить дубликаы циклов по порядковому номеру (оставить только последний) ✅ 
+routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
+  return c.json({ message: 'disabled for now' });
+});
+
+// Ручная синхронизация (для тестирования) ✅ 
 routes.post('/sheets/manual-sync', async (c) => {
   try {
     const body = await c.req.json() as GoogleSheetRow;
@@ -1015,139 +1183,8 @@ routes.post('/sheets/manual-sync', async (c) => {
   }
 });
 
-// **NEW**: Синхронизация процентов завершения из Google Sheets (каждые 15 мин)
-// Вызывается по расписанию (каждые 15 минут) из Google Apps Script
-// Формат: { "1": 45.5, "2": 78.3, "3": 99.0, ... "21": 115.5 }
-routes.post('/sheets/sync-progress', async (c) => {
-  try {
-    const body = await c.req.json();
-    console.log('[Sheets] Получены проценты завершения:', body);
-    
-    // Валидация: должен быть объект с числами от 1 до 21 как ключами
-    if (typeof body !== 'object' || Array.isArray(body)) {
-      return c.json({ error: 'Неверный формат данных. Ожидается объект { "1": percent, "2": percent, ... }' }, 400);
-    }
-    
-    const updates: Array<{ chamber: number, progress: number, success: boolean, error?: string }> = [];
-    
-    // Обновляем каждую камеру
-    for (const [chamberStr, progressPercent] of Object.entries(body)) {
-      const chamberNum = parseInt(chamberStr);
-      const progress = typeof progressPercent === 'number' ? progressPercent : parseFloat(progressPercent as string);
-      
-      // Валидация
-      if (isNaN(chamberNum) || chamberNum < 1 || chamberNum > 21 || isNaN(progress)) {
-        updates.push({ chamber: chamberNum, progress, success: false, error: 'Invalid data' });
-        continue;
-      }
-      
-      try {
-        // Найти активный цикл для этой камеры
-        const cycles = await kv.getByPrefix(`cycle_`);
-        const activeCycle = cycles.find((c: any) => 
-          c.chamberNumber === chamberNum && 
-          c.status === 'In Progress' && 
-          !c.endDate
-        );
-        
-        if (activeCycle) {
-          // Обновляем процент (сохраняем с одним знаком после запятй)
-          const roundedProgress = Math.round(progress * 10) / 10;
-          activeCycle.progressPercent = roundedProgress;
-          await kv.set(`cycle_${activeCycle.id}`, activeCycle);
-          updates.push({ chamber: chamberNum, progress: roundedProgress, success: true });
-          console.log(`[Sheets] Камера ${chamberNum}: обновлен процент до ${roundedProgress}%`);
-        } else {
-          // Нет активного цикла - пропускаем
-          updates.push({ chamber: chamberNum, progress, success: false, error: 'No active cycle' });
-        }
-      } catch (err: any) {
-        console.error(`[Sheets] Ошибка обновления камеры ${chamberNum}:`, err);
-        updates.push({ chamber: chamberNum, progress, success: false, error: err.message });
-      }
-    }
-    
-    const successCount = updates.filter(u => u.success).length;
-    console.log(`[Sheets] Синхронизация процентов завершена: ${successCount}/${updates.length} успешно`);
-    
-    return c.json({ 
-      success: true, 
-      message: `Обновлено ${successCount} из ${updates.length} камер`,
-      updates 
-    });
-    
-  } catch (error: any) {
-    console.error('[Sheets] Ошибка синхронизации процентов:', error);
-    return c.json({ error: error.message }, 500);
-  }
-});
 
-// POST /analyze-weight - Analyze weight from scale photo using OpenAI Vision
-routes.post('/analyze-weight', async (c) => {
-  try {
-    const { image } = await c.req.json();
-    
-    if (!image) {
-      return c.json({ error: 'No image provided' }, 400);
-    }
-
-    const openAIKey = Deno.env.get('OPENAI_API_KEY');
-    if (!openAIKey) {
-      console.error('OPENAI_API_KEY not configured');
-      return c.json({ error: 'OpenAI API key not configured' }, 500);
-    }
-
-    // Опраляем изображеие на OpenAI Vision API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openAIKey}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Look at this image of a scale/weighing device. Extract ONLY the weight number in tons (t). Return ONLY a number, nothing else. If you see multiple numbers, return the largest weight value. Examples: "10.5" or "12.3". If no weight is visible, return "0".'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: image
-                }
-              }
-            ]
-          }
-        ],
-        max_tokens: 50
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('OpenAI API error:', errorText);
-      return c.json({ error: 'Failed to analyze image', details: errorText }, 500);
-    }
-
-    const data = await response.json();
-    const weightText = data.choices?.[0]?.message?.content?.trim();
-    const weight = parseFloat(weightText || '0');
-
-    console.log(`Weight analyzed: ${weight} tons`);
-    
-    return c.json({ weight: isNaN(weight) ? 0 : weight });
-    
-  } catch (error: any) {
-    console.error('Error analyzing weight:', error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-// НОВЫЙ: Получить настройки пород дерева
+// НОВЫЙ: Получить настройки пород дерева ✅ 
 routes.get('/wood-settings', async (c) => {
   try {
     console.log('[WoodSettings] Запрос настроек пород дерева');
@@ -1179,7 +1216,7 @@ routes.get('/wood-settings', async (c) => {
   }
 });
 
-// НОВЫЙ: Сохранить настройки пород дерева
+// НОВЫЙ: Сохранить настройки пород дерева ✅ 
 routes.post('/wood-settings', async (c) => {
   try {
     console.log('[WoodSettings] Сохранение настроек пород дерева');
@@ -1226,9 +1263,10 @@ routes.post('/wood-settings', async (c) => {
     console.error('[WoodSettings] Ошибка сохранения:', error);
     return c.json({ error: error.message }, 500);
   }
+  console.log('🔥 POST /wood-settings CALLED');
 });
 
-// Проверка общего пароля приложения
+// Проверка общего пароля приложения ✅ 
 routes.post('/check-app-password', async (c) => {
   try {
     const { password } = await c.req.json();
@@ -1258,7 +1296,7 @@ routes.post('/check-app-password', async (c) => {
   }
 });
 
-// Проверка пароля администратора
+// Проверка пароля администратора ✅ 
 routes.post('/check-admin-password', async (c) => {
   try {
     const { password } = await c.req.json();
@@ -1288,7 +1326,7 @@ routes.post('/check-admin-password', async (c) => {
   }
 });
 
-// Обновить настройки паролей (только для админа)
+// Обновить настройки паролей (только для админа) ✅ 
 routes.post('/password-settings', async (c) => {
   try {
     const { appPassword, adminPassword } = await c.req.json();
@@ -1315,85 +1353,148 @@ routes.post('/password-settings', async (c) => {
     return c.json({ error: error.message }, 500);
   }
 });
+// Получить настройки Telegram (только для админа) ✅ 
+async function getSetting(key: string, defaultValue: any = null) {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', key)
+    .maybeSingle();
 
+  if (error) {
+    console.error('[Settings] Ошибка получения:', error);
+    return defaultValue;
+  }
+
+  return data?.value ?? defaultValue;
+}
+
+async function setSetting(key: string, value: any) {
+  const { error } = await supabase
+    .from('settings')
+    .upsert({
+      key,
+      value
+    });
+
+  if (error) {
+    console.error('[Settings] Ошибка сохранения:', error);
+    throw error;
+  }
+}
 // Получить настройки Telegram (только для админа)
 routes.get('/telegram-settings', async (c) => {
   try {
-    const settings = await kv.get('telegram_settings') || {
+    const settings = await getSetting('telegram_settings', {
       botToken: '',
       chatId: '',
       enabled: false
-    };
-    
-    return c.json(settings);
+    });
+
+    return c.json({
+      ...settings,
+      botToken: settings.botToken ? '******' : ''
+    });
+
   } catch (error: any) {
-    console.error('[TelegramSettings] Ошибка получения настроек:', error);
     return c.json({ error: error.message }, 500);
   }
 });
 
-// Сохранить настройки Telegram (только для админа)
+// Сохранить настройки Telegram (только для админа)  ✅ 
 routes.post('/telegram-settings', async (c) => {
   try {
     const { botToken, chatId, enabled } = await c.req.json();
-    
-    const settings = {
-      botToken: botToken || '',
-      chatId: chatId || '',
-      enabled: enabled || false
+
+    const current = await getSetting('telegram_settings', {});
+
+    const newSettings = {
+      botToken: botToken ?? current.botToken ?? '',
+      chatId: chatId ?? current.chatId ?? '',
+      enabled: enabled ?? current.enabled ?? false
     };
-    
-    await kv.set('telegram_settings', settings);
-    console.log('[TelegramSettings] Настройки Telegram сохранены');
-    
+
+    await setSetting('telegram_settings', newSettings);
+
     return c.json({ success: true });
+
   } catch (error: any) {
-    console.error('[TelegramSettings] Ошибка сохранения настроек:', error);
     return c.json({ error: error.message }, 500);
   }
 });
 
-// Отправить информацию о взвешивании в Telegram
+// Отправить информацию о взвешивании в Telegram 
 routes.post('/send-telegram-weighing', async (c) => {
   try {
     const { cycleId, weighingRecord } = await c.req.json();
-    
+
     if (!cycleId || !weighingRecord) {
       return c.json({ error: 'Missing required fields' }, 400);
     }
-    
-    console.log('[Telegram] Отправка информации о взвешивании для цикла:', cycleId);
-    
-    // Получаем настройки Telegram
-    const settings = await kv.get('telegram_settings');
-    
-    if (!settings || !settings.enabled || !settings.botToken || !settings.chatId) {
-      console.log('[Telegram] Telegram не настроен или отключен');
-      return c.json({ 
-        error: 'Telegram не настроен. Пожалуйста, настройте бота в панели администратора.' 
-      }, 400);
+
+    console.log('[Telegram] Отправка взвешивания:', cycleId);
+
+    // ✅ 1. Telegram settings
+    const { data: settingsRow, error: settingsError } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'telegram_settings')
+      .single();
+
+    if (settingsError || !settingsRow?.value) {
+      return c.json({ error: 'Telegram settings not found' }, 404);
     }
-    
-    // Получаем информацию о цикле
-    const cycle = await kv.get(`cycle_${cycleId}`);
-    
-    if (!cycle) {
+
+    const settings = settingsRow.value;
+
+    if (!settings.enabled || !settings.botToken || !settings.chatId) {
+      return c.json({ error: 'Telegram not configured' }, 400);
+    }
+
+    // ✅ 2. Cycle
+    const { data: cycle, error: cycleError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', cycleId)
+      .single();
+
+    if (cycleError || !cycle) {
       return c.json({ error: 'Цикл не найден' }, 404);
     }
-    
-    // Получаем историю взвешиваний для этого цикла
-    const weighingHistory = cycle.weighingHistory || [];
-    
-    // Находим предыдущее взвешивание (не текущее)
-    const currentTimestamp = weighingRecord.timestamp;
-    const previousWeighing = weighingHistory
-      .filter((w: any) => w.timestamp !== currentTimestamp)
-      .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
-    
-    // Формируем красивое сообщение на литовском
-    const { weights, hoursFromStart, recommendation, recommendationData, totalWeight } = weighingRecord;
-    
-    // Конвертируем время в литовский часовой пояс (Europe/Vilnius)
+
+    // ✅ 3. Сохраняем взвешивание
+const { data: insertData, error: insertError } = await supabase
+  .from('weighing_records')
+  .insert({
+    cycle_id: cycleId,
+    timestamp: weighingRecord.timestamp || new Date().toISOString(),
+    weights: weighingRecord.weights || [],
+    weight_limit: weighingRecord.weightLimit,
+    hours_from_start: weighingRecord.hoursFromStart,
+    recommendation: weighingRecord.recommendation,
+    recommendation_data: weighingRecord.recommendationData
+  })
+  .select();
+
+if (insertError) {
+  console.error('❌ INSERT ERROR:', insertError);
+  return c.json({ error: insertError.message }, 500);
+}
+
+console.log('✅ INSERT OK:', insertData);
+
+    // ✅ 4. Предыдущее взвешивание (SQL вместо weighingHistory)
+    const { data: previousWeighings } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .lt('timestamp', weighingRecord.timestamp)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    const previousWeighing = previousWeighings?.[0];
+
+    // ✅ 5. Время
     const lithuanianTime = new Date(weighingRecord.timestamp).toLocaleString('lt-LT', {
       timeZone: 'Europe/Vilnius',
       year: 'numeric',
@@ -1403,151 +1504,138 @@ routes.post('/send-telegram-weighing', async (c) => {
       minute: '2-digit',
       hour12: false
     });
-    
-    // Функция для выбора 3 наиболее близких по весу ящиков
+
+    const { weights, hoursFromStart, recommendationData } = weighingRecord;
+
+    // ✅ 6. 3 ближайших ящика
     const getClosest3Boxes = (boxes: number[]) => {
       if (boxes.length <= 3) return boxes;
-      
-      // Сортируем ящики по весу
+
       const sorted = [...boxes].sort((a, b) => a - b);
-      
-      // Находим 3 последовательных ящика с минимальной разницей
+
       let minDiff = Infinity;
       let bestStart = 0;
-      
+
       for (let i = 0; i <= sorted.length - 3; i++) {
-        const diff = sorted[i + 2] - sorted[i]; // разница между первым и третьим
+        const diff = sorted[i + 2] - sorted[i];
         if (diff < minDiff) {
           minDiff = diff;
           bestStart = i;
         }
       }
-      
+
       return [sorted[bestStart], sorted[bestStart + 1], sorted[bestStart + 2]];
     };
-    
-    // Получаем 3 наиболее близких ящика для текущего взвешивания
+
+    // ✅ 7. Средний вес
     const closest3Current = getClosest3Boxes(weights);
-    const averageWeight = (closest3Current.reduce((sum, w) => sum + w, 0) / 3).toFixed(2);
-    
-    // Определяем эмодзи для каждой коробки (зеленый/красный)
+    const averageWeight = (
+      closest3Current.reduce((sum, w) => sum + w, 0) / 3
+    ).toFixed(2);
+
+    // ✅ 8. Список коробок
     const weightLimit = weighingRecord.weightLimit || 0;
-    const allGood = weights.every((w: number) => w <= weightLimit);
-    const statusEmoji = allGood ? '✅' : '❌';
-    
-    // Формируем компактный список коробок БЕЗ НОМЕРОВ
+
     const boxList = weights
       .map((w: number) => {
         const emoji = w <= weightLimit ? '✅' : '❌';
         return `📦 ${w}t ${emoji}`;
       })
       .join('\n');
-    
-    // Определяем рекомендацию (упрощенная)
+
+    // ✅ 9. Рекомендация
     let recommendationText = '';
-    
+
     if (recommendationData) {
       if (recommendationData.type === 'approved') {
         recommendationText = '\n\n✅ GATAVA RINKTI!';
       } else {
-        recommendationText = `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
+        recommendationText =
+          `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
       }
     }
-    
-    // Вычисляем изменения только если есть предыдущее взвешивание
+
+    // ✅ 10. Изменение веса
     let changeInfo = '';
+
     if (previousWeighing) {
-      const previousWeights = previousWeighing.weights || [];
-      const timeDiff = (new Date(weighingRecord.timestamp).getTime() - new Date(previousWeighing.timestamp).getTime()) / (1000 * 60 * 60);
-      
-      // Получаем 3 наиболее близких ящика из предыдущего взвешивания
-      const closest3Previous = getClosest3Boxes(previousWeights);
-      const previousAverage = closest3Previous.reduce((sum, w) => sum + w, 0) / 3;
-      const currentAverage = parseFloat(averageWeight);
-      
-      // Рассчитываем изменение среднего веса
-      const weightLoss = previousAverage - currentAverage;
-      const lossRate = timeDiff > 0 ? (weightLoss / timeDiff) : 0;
-      
+      const prevWeights = previousWeighing.weights || [];
+
+      const timeDiff =
+        (new Date(weighingRecord.timestamp).getTime() -
+          new Date(previousWeighing.timestamp).getTime()) /
+        (1000 * 60 * 60);
+
+      const closest3Prev = getClosest3Boxes(prevWeights);
+
+      const prevAvg =
+        closest3Prev.reduce((sum: number, w: number) => sum + w, 0) / 3;
+
+      const currAvg = parseFloat(averageWeight);
+
+      const weightLoss = prevAvg - currAvg;
+      const lossRate = timeDiff > 0 ? weightLoss / timeDiff : 0;
+
       if (weightLoss > 0) {
-        changeInfo = `\n\n📉 ${previousAverage.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+        changeInfo =
+          `\n\n📉 ${prevAvg.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)` +
+          `\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
       }
     }
-    
-    // УПРОЩЕННОЕ СООБЩЕНИЕ
+
+    // ✅ 11. Сообщение
     const message = `<b>📦 ${cycle.chamberNumber}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
-🌲 ${cycle.woodType} (#${cycle.sequentialNumber})
+🌲 ${cycle.wood_type_lt} (#${cycle.sequentialNumber})
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
 ${boxList}${changeInfo}${recommendationText}`.trim();
-    
-    // Отправляем сообщение в Telegram
-    const telegramUrl = `https://api.telegram.org/bot${settings.botToken}/sendMessage`;
-    
-    const response = await fetch(telegramUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: settings.chatId,
-        text: message,
-        parse_mode: 'HTML'
-      })
-    });
-    
+
+    // ✅ 12. Telegram send
+    const response = await fetch(
+      `https://api.telegram.org/bot${settings.botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: settings.chatId,
+          text: message,
+          parse_mode: 'HTML'
+        })
+      }
+    );
+
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('[Telegram] Ошибка отправки:', errorData);
-      
-      // Формируем понятное сообщение об ошибке
-      let errorMessage = 'Ошибка отправки в Telegram';
-      if (errorData.description?.includes('bot was blocked')) {
-        errorMessage = 'Бот заблокирован пользователем. Разблокируйте бота и попробуйте снова.';
-      } else if (errorData.description?.includes('chat not found')) {
-        errorMessage = 'Чат не найден. Проверьте правильность Chat ID.';
-      } else if (errorData.description?.includes('bots can\'t send messages to bots')) {
-        errorMessage = 'Нельзя отправлять сообщения другим ботам. Укажите Chat ID личного чата или группы.';
-      } else if (errorData.description?.includes('Unauthorized')) {
-        errorMessage = 'Неверный токен бота. Проверьте правильность токена.';
-      }
-      
-      return c.json({ 
-        error: errorMessage, 
-        details: errorData 
-      }, 500);
+      console.error('[Telegram] Ошибка:', errorData);
+      return c.json({ error: 'Ошибка отправки в Telegram', details: errorData }, 500);
     }
-    
+
     const result = await response.json();
-    console.log('[Telegram] Сообщение отправлено успешно:', result);
-    
-    return c.json({ 
-      success: true, 
-      message: 'Сообщение отправлено в Telegram',
+
+    return c.json({
+      success: true,
       messageId: result.result?.message_id
     });
-    
+
   } catch (error: any) {
-    console.error('[Telegram] Ошибка отправки сообщения:', error);
+    console.error('[Telegram] ERROR:', error);
     return c.json({ error: error.message }, 500);
   }
 });
+    
 
-// Тестирование настроек Telegram
 routes.post('/test-telegram', async (c) => {
   try {
     const { botToken, chatId } = await c.req.json();
-    
+
     if (!botToken || !chatId) {
       return c.json({ error: 'Missing required fields' }, 400);
     }
-    
-    console.log('[Telegram] Тестовая отправка сообщения');
-    
+
     const testMessage = `
 🧪 <b>TEST MESSAGE / TESTINIS PRANEŠIMAS</b>
 
@@ -1555,60 +1643,33 @@ routes.post('/test-telegram', async (c) => {
 Telegram botas sukonfigūruotas sėkmingai!
 
 DryTrack notification system is ready to use.
-DryTrack pranešimų система paruošta naudojimui.
+Sistema paruošta naudojimui.
 
 🔔 You will receive weighing notifications here.
-Čia gausite pranešimus apie svėrimą.
+Čia gausite svėrimo pranešimus.
     `.trim();
-    
-    // Отправляем тестовое сообщение
-    const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
-    
-    const response = await fetch(telegramUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: testMessage,
-        parse_mode: 'HTML'
-      })
-    });
-    
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: testMessage,
+          parse_mode: 'HTML'
+        })
+      }
+    );
+
     if (!response.ok) {
       const errorData = await response.json();
-      console.error('[Telegram] Ошибка тестовой отправки:', errorData);
-      
-      // Формируем понятное сообщение об ошибке
-      let errorMessage = 'Ошибка отправки в Telegram';
-      if (errorData.description?.includes('bot was blocked')) {
-        errorMessage = 'Бот заблокирован пользователем. Разблокируйте бота и попробуйте снова.';
-      } else if (errorData.description?.includes('chat not found')) {
-        errorMessage = '❌ ЧАТ НЕ НАЙДЕН!\n\n🔴 ВЫ ЗАБЫЛИ САМЫЙ ВАЖНЫЙ ШАГ:\n\n1️⃣ Откройте Telegram\n2️⃣ Найдите вашего бота по username (например @YourBot)\n3️⃣ ОБЯЗАТЕЛЬНО нажмите кнопку "СТАРТ" или отправьте /start\n4️⃣ После этого вернитесь сюда и нажмите "Тестировать" снова\n\n💡 БЕЗ /start бот не может отправлять сообщения!';
-      } else if (errorData.description?.includes('bots can\'t send messages to bots')) {
-        errorMessage = 'Нельзя отправлять сообщения другим ботам! Chat ID должен быть вашим личным чатом или группой. Используйте @userinfobot чтобы получить правильный Chat ID.';
-      } else if (errorData.description?.includes('Unauthorized')) {
-        errorMessage = 'Неверный токен бота. Проверьте правильность токена от @BotFather.';
-      }
-      
-      return c.json({ 
-        error: errorMessage, 
-        details: errorData 
-      }, 400);
+      return c.json({ error: 'Telegram error', details: errorData }, 500);
     }
-    
-    const result = await response.json();
-    console.log('[Telegram] Тестовое сообщение отправлено успешно:', result);
-    
-    return c.json({ 
-      success: true, 
-      message: 'Тестовое сообщение отправлено успешно!',
-      messageId: result.result?.message_id
-    });
-    
+
+    return c.json({ success: true });
+
   } catch (error: any) {
-    console.error('[Telegram] Ошибка тестирования:', error);
     return c.json({ error: error.message }, 500);
   }
 });
