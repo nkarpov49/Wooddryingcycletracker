@@ -486,6 +486,31 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
         // Не прерываем обновление цикла, просто логируем ошибку
       } else {
         console.log('[Cycle PUT] ✅ Взвешивание сохранено');
+        
+        // 🔥 АВТОМАТИЧЕСКАЯ ОТПРАВКА В TELEGRAM после сохранения взвешивания
+        try {
+          // Получаем настройки Telegram
+          const { data: settingsRow } = await supabase
+            .from('settings')
+            .select('value')
+            .eq('key', 'telegram_settings')
+            .single();
+          
+          // Проверяем что Telegram настроен и включён
+          if (settingsRow?.value?.enabled && settingsRow.value.botToken && settingsRow.value.chatId) {
+            console.log('[Cycle PUT] 📤 Отправляем в Telegram...');
+            
+            // Вызываем внутреннюю функцию отправки
+            await sendWeighingToTelegram(id, settingsRow.value);
+            
+            console.log('[Cycle PUT] ✅ Telegram отправлен успешно');
+          } else {
+            console.log('[Cycle PUT] ℹ️ Telegram не настроен или выключен, пропускаем отправку');
+          }
+        } catch (telegramError: any) {
+          console.error('[Cycle PUT] ⚠️ Ошибка Telegram (не критично):', telegramError.message);
+          // Не прерываем выполнение, просто логируем
+        }
       }
     }
 
@@ -1570,6 +1595,214 @@ routes.post('/telegram-settings', async (c) => {
     return c.json({ error: error.message }, 500);
   }
 });
+
+// 🔥 HELPER: Отправка взвешивания в Telegram (вынесена в отдельную функцию)
+async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
+  try {
+    console.log('[Telegram] 📤 Начало отправки для цикла:', cycleId);
+    
+    // 1. Получаем цикл
+    const { data: cycle, error: cycleError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', cycleId)
+      .single();
+
+    if (cycleError || !cycle) {
+      console.error('[Telegram] ❌ Цикл не найден:', cycleError);
+      return;
+    }
+    
+    // 🔥 ПРОВЕРКА: chamber_number должен существовать
+    if (!cycle.chamber_number) {
+      console.error('[Telegram] ❌ У цикла отсутствует chamber_number!');
+      return;
+    }
+
+    // 2. ЧИТАЕМ ПОСЛЕДНЕЕ ВЗВЕШИВАНИЕ ИЗ БД
+    const { data: latestWeighings, error: latestError } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    if (latestError || !latestWeighings || latestWeighings.length === 0) {
+      console.error('[Telegram] ❌ Взвешивание не найдено:', latestError);
+      return;
+    }
+
+    const savedRecord = latestWeighings[0];
+    
+    console.log('[Telegram] ✅ Используем взвешивание из БД:', savedRecord.id);
+    
+    // 3. ПАРСИМ JSON поля из БД
+    let weights = [];
+    let recommendationData = null;
+    
+    try {
+      weights = typeof savedRecord.weights === 'string' 
+        ? JSON.parse(savedRecord.weights) 
+        : (savedRecord.weights || []);
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга weights:', e);
+      weights = [];
+    }
+    
+    try {
+      recommendationData = typeof savedRecord.recommendation_data === 'string'
+        ? JSON.parse(savedRecord.recommendation_data)
+        : savedRecord.recommendation_data;
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга recommendation_data:', e);
+      recommendationData = null;
+    }
+    
+    const hoursFromStart = savedRecord.hours_from_start;
+    const weightLimit = savedRecord.weight_limit || 0;
+
+    // 4. Предыдущее взвешивание
+    const { data: previousWeighings } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .lt('timestamp', savedRecord.timestamp)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    const previousWeighing = previousWeighings?.[0];
+
+    // 5. Время
+    const lithuanianTime = new Date(savedRecord.timestamp).toLocaleString('lt-LT', {
+      timeZone: 'Europe/Vilnius',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+    // 6. 3 ближайших ящика
+    const getClosest3Boxes = (boxes: number[]) => {
+      if (boxes.length <= 3) return boxes;
+
+      const sorted = [...boxes].sort((a, b) => a - b);
+
+      let minDiff = Infinity;
+      let bestStart = 0;
+
+      for (let i = 0; i <= sorted.length - 3; i++) {
+        const diff = sorted[i + 2] - sorted[i];
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestStart = i;
+        }
+      }
+
+      return [sorted[bestStart], sorted[bestStart + 1], sorted[bestStart + 2]];
+    };
+
+    // 7. Средний вес
+    const closest3Current = getClosest3Boxes(weights);
+    const averageWeight = (
+      closest3Current.reduce((sum, w) => sum + w, 0) / 3
+    ).toFixed(2);
+
+    // 8. Список коробок
+    const boxList = weights
+      .map((w: number) => {
+        const emoji = w <= weightLimit ? '✅' : '❌';
+        return `📦 ${w}t ${emoji}`;
+      })
+      .join('\n');
+
+    // 9. Рекомендация
+    let recommendationText = '';
+
+    if (recommendationData) {
+      if (recommendationData.type === 'approved') {
+        recommendationText = '\n\n✅ GATAVA RINKTI!';
+      } else {
+        recommendationText =
+          `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
+      }
+    }
+
+    // 10. Изменение веса
+    let changeInfo = '';
+
+    if (previousWeighing) {
+      let prevWeights = [];
+      try {
+        prevWeights = typeof previousWeighing.weights === 'string'
+          ? JSON.parse(previousWeighing.weights)
+          : (previousWeighing.weights || []);
+      } catch (e) {
+        console.error('[Telegram] Ошибка парсинга prevWeights:', e);
+      }
+
+      const timeDiff =
+        (new Date(savedRecord.timestamp).getTime() -
+          new Date(previousWeighing.timestamp).getTime()) /
+        (1000 * 60 * 60);
+
+      const closest3Prev = getClosest3Boxes(prevWeights);
+
+      const prevAvg =
+        closest3Prev.reduce((sum: number, w: number) => sum + w, 0) / 3;
+
+      const currAvg = parseFloat(averageWeight);
+
+      const weightLoss = prevAvg - currAvg;
+      const lossRate = timeDiff > 0 ? weightLoss / timeDiff : 0;
+
+      if (weightLoss > 0) {
+        changeInfo =
+          `\n\n📉 ${prevAvg.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)` +
+          `\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+      }
+    }
+
+    // 11. Сообщение
+    const message = `<b>📦 Sušilė ${cycle.chamber_number}</b>
+
+📅 ${lithuanianTime}
+⏱ ${hoursFromStart}val nuo pradžios
+🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
+🎯 Tikslas: ${weightLimit}t/dėžė
+
+<b>Rezultatas:</b>
+${boxList}${changeInfo}${recommendationText}`.trim();
+
+    // 12. Telegram send
+    const response = await fetch(
+      `https://api.telegram.org/bot${telegramSettings.botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: telegramSettings.chatId,
+          text: message,
+          parse_mode: 'HTML'
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Telegram] ❌ Ошибка:', errorData);
+      throw new Error('Telegram API error');
+    }
+
+    const result = await response.json();
+    console.log('[Telegram] ✅ Сообщение отправлено! Message ID:', result.result?.message_id);
+
+  } catch (error: any) {
+    console.error('[Telegram] ❌ Ошибка отправки:', error.message);
+    throw error;
+  }
+}
 
 // Отправить информацию о взвешивании в Telegram 
 routes.post('/send-telegram-weighing', async (c) => {
