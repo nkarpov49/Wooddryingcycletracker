@@ -34,7 +34,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   
   // Состояние редактирования
   const [editedComment, setEditedComment] = useState(cycle.overallComment || '');
-  const [editedResultPhotos, setEditedResultPhotos] = useState(cycle.resultPhotos || []);
+  const [editedResultPhotos, setEditedResultPhotos] = useState(
+  (cycle.resultPhotos || []).map((p: any) => ({
+    path: p.path
+  }))
+);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
