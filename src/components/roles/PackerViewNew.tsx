@@ -212,10 +212,18 @@ const handleViewDetails = async (cycle: DryingCycle) => {
     setLoadingModal(true);
 
     // 👉 получаем полный цикл с сервера
-    const fullCycle = await api.getCycleById(cycle.id);
+   const fullCycle = await api.getCycleById(cycle.id);
 
-    // 👉 сохраняем в state и открываем модалку
-    setSelectedCycle(fullCycle);
+// 🔥 ЧИСТИМ blob
+const cleanedCycle = {
+  ...fullCycle,
+  resultPhotos: (fullCycle.resultPhotos || []).map((p: any) => ({
+    path: p.path
+  })),
+  recipePhotos: [] // вообще не используем больше
+};
+
+setSelectedCycle(cleanedCycle);
     setDetailModalOpen(true);
 
   } catch (error) {
