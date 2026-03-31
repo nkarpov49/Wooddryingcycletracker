@@ -405,14 +405,8 @@ const loadWoodSettings = async () => {
         }
       );
 
-      // 2. Отправляем в Telegram (если настроен)
-      try {
-        await api.sendWeighingToTelegram(selectedChamber.id, newWeighingRecord);
-        console.log('[Telegram] Сообщение отправлено');
-      } catch (telegramError: any) {
-        console.log('[Telegram] Ошибка отправки (возможно не настроен):', telegramError.message);
-        // Не показываем ошибку пользователю, так как это не критично
-      }
+      // 🔥 TELEGRAM ТЕПЕРЬ ОТПРАВЛЯЕТСЯ АВТОМАТИЧЕСКИ НА BACKEND
+      // (убрали дублирующий вызов с фронтенда)
 
       toast.success(t('saved'));
       setSelectedChamber(null);
