@@ -309,6 +309,30 @@ routes.get('/cycles/:id', async (c) => {
     // ✅ Преобразуем данные в frontend формат
     const cycle = fromDb(data);
 
+    // ✅ Загружаем историю взвешиваний из weighing_records
+    const { data: weighingRecords } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', id)
+      .order('timestamp', { ascending: true });
+
+    // Преобразуем weighing_records в формат weighingHistory
+    if (weighingRecords && weighingRecords.length > 0) {
+      cycle.weighingHistory = weighingRecords.map((record: any) => ({
+        timestamp: record.timestamp,
+        hoursFromStart: record.hours_from_start,
+        hoursSinceLastCheck: record.hours_since_last_check,
+        weights: record.weights || [],
+        totalWeight: record.total_weight,
+        weightLimit: record.weight_limit,
+        recommendation: record.recommendation,
+        recommendationData: record.recommendation_data,
+        driverName: record.driver_name
+      }));
+    } else {
+      cycle.weighingHistory = [];
+    }
+
     // ✅ Подписываем URL фотографий
     const signedCycle = await signCycleUrls(cycle);
 
@@ -1626,11 +1650,11 @@ console.log('✅ INSERT OK:', insertData);
     }
 
     // ✅ 11. Сообщение
-    const message = `<b>📦 ${cycle.chamberNumber}</b>
+    const message = `<b>📦 ${cycle.chamber_number}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
-🌲 ${cycle.wood_type_lt} (#${cycle.sequentialNumber})
+🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
