@@ -29,15 +29,27 @@ export default function OperatorView() {
   const chambers = Array.from({ length: 21 }, (_, i) => i + 1);
 
   const fetchCycles = async () => {
-    try {
-      const data = await api.getCycles();
-      setCycles(data.filter((c: any) => c.status === 'In Progress' && !c.endDate));
-    } catch (e) {
-      toast.error(t('error'));
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const data = await api.getActiveCycles();
+    console.log('ACTIVE CYCLES:', data);
+
+    const mappedCycles = data.map((c: any) => ({
+      ...c,
+      chamberNumber: c.chamber_number,
+      startDate: c.start_date,
+      woodType: c.wood_type_lt,
+      sequentialNumber: c.sequential_number,
+      recipePhotos: c.recipe_photos,
+      recipePhotoPath: c.recipe_photo_path,
+    }));
+
+    setCycles(mappedCycles);
+  } catch (e) {
+    toast.error(t('error'));
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchCycles();
@@ -147,6 +159,7 @@ export default function OperatorView() {
       const newPhotos = [];
       for (const photo of stagedPhotos) {
           const { path } = await api.uploadFile(photo.file);
+        console.log('📸 UPLOAD RESULT:', path);
           newPhotos.push({
               path,
               url: photo.url, // Temporary
@@ -494,7 +507,9 @@ export default function OperatorView() {
       ) : (
         <div className="p-3 sm:p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
           {chambers.map(chamberNum => {
-            const active = cycles.find(c => c.chamberNumber === chamberNum);
+            const active = cycles.find(
+              c => c.chamberNumber === chamberNum
+            );
             const hasRecipePhoto = active && (active.recipePhotoPath || (active.recipePhotos && active.recipePhotos.length > 0));
             
             return (
