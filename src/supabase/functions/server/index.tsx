@@ -316,19 +316,43 @@ routes.get('/cycles/:id', async (c) => {
       .eq('cycle_id', id)
       .order('timestamp', { ascending: true });
 
-    // Преобразуем weighing_records в формат weighingHistory
+    // Преобразуем weighing_records в формат weighingHistory с ПАРСИНГОМ JSON
     if (weighingRecords && weighingRecords.length > 0) {
-      cycle.weighingHistory = weighingRecords.map((record: any) => ({
-        timestamp: record.timestamp,
-        hoursFromStart: record.hours_from_start,
-        hoursSinceLastCheck: record.hours_since_last_check,
-        weights: record.weights || [],
-        totalWeight: record.total_weight,
-        weightLimit: record.weight_limit,
-        recommendation: record.recommendation,
-        recommendationData: record.recommendation_data,
-        driverName: record.driver_name
-      }));
+      cycle.weighingHistory = weighingRecords.map((record: any) => {
+        // 🔥 ПАРСИМ JSON поля из БД (PostgreSQL JSONB возвращается как строки)
+        let weights = [];
+        let recommendationData = null;
+        
+        try {
+          weights = typeof record.weights === 'string' 
+            ? JSON.parse(record.weights) 
+            : (record.weights || []);
+        } catch (e) {
+          console.error('[Cycle] Ошибка парсинга weights:', e);
+          weights = [];
+        }
+        
+        try {
+          recommendationData = typeof record.recommendation_data === 'string'
+            ? JSON.parse(record.recommendation_data)
+            : record.recommendation_data;
+        } catch (e) {
+          console.error('[Cycle] Ошибка парсинга recommendation_data:', e);
+          recommendationData = null;
+        }
+        
+        return {
+          timestamp: record.timestamp,
+          hoursFromStart: record.hours_from_start,
+          hoursSinceLastCheck: record.hours_since_last_check,
+          weights: weights,
+          totalWeight: record.total_weight,
+          weightLimit: record.weight_limit,
+          recommendation: record.recommendation,
+          recommendationData: recommendationData,
+          driverName: record.driver_name
+        };
+      });
     } else {
       cycle.weighingHistory = [];
     }
@@ -1528,7 +1552,7 @@ routes.post('/send-telegram-weighing', async (c) => {
       return c.json({ error: 'Цикл не найден' }, 404);
     }
 
-    // ✅ 3. Сохраняем взвешивание
+    // ✅ 3. Сохраняем взвешивание в БД
 const { data: insertData, error: insertError } = await supabase
   .from('weighing_records')
   .insert({
@@ -1549,19 +1573,47 @@ if (insertError) {
 
 console.log('✅ INSERT OK:', insertData);
 
+    // 🔥 ИСПОЛЬЗУЕМ ДАННЫЕ ИЗ БД (не из weighingRecord)!
+    const savedRecord = insertData[0];
+    
+    // 🔥 ПАРСИМ JSON поля из БД
+    let weights = [];
+    let recommendationData = null;
+    
+    try {
+      weights = typeof savedRecord.weights === 'string' 
+        ? JSON.parse(savedRecord.weights) 
+        : (savedRecord.weights || []);
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга weights:', e);
+      weights = [];
+    }
+    
+    try {
+      recommendationData = typeof savedRecord.recommendation_data === 'string'
+        ? JSON.parse(savedRecord.recommendation_data)
+        : savedRecord.recommendation_data;
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга recommendation_data:', e);
+      recommendationData = null;
+    }
+    
+    const hoursFromStart = savedRecord.hours_from_start;
+    const weightLimit = savedRecord.weight_limit || 0;
+
     // ✅ 4. Предыдущее взвешивание (SQL вместо weighingHistory)
     const { data: previousWeighings } = await supabase
       .from('weighing_records')
       .select('*')
       .eq('cycle_id', cycleId)
-      .lt('timestamp', weighingRecord.timestamp)
+      .lt('timestamp', savedRecord.timestamp)
       .order('timestamp', { ascending: false })
       .limit(1);
 
     const previousWeighing = previousWeighings?.[0];
 
     // ✅ 5. Время
-    const lithuanianTime = new Date(weighingRecord.timestamp).toLocaleString('lt-LT', {
+    const lithuanianTime = new Date(savedRecord.timestamp).toLocaleString('lt-LT', {
       timeZone: 'Europe/Vilnius',
       year: 'numeric',
       month: '2-digit',
@@ -1570,8 +1622,6 @@ console.log('✅ INSERT OK:', insertData);
       minute: '2-digit',
       hour12: false
     });
-
-    const { weights, hoursFromStart, recommendationData } = weighingRecord;
 
     // ✅ 6. 3 ближайших ящика
     const getClosest3Boxes = (boxes: number[]) => {
@@ -1600,8 +1650,6 @@ console.log('✅ INSERT OK:', insertData);
     ).toFixed(2);
 
     // ✅ 8. Список коробок
-    const weightLimit = weighingRecord.weightLimit || 0;
-
     const boxList = weights
       .map((w: number) => {
         const emoji = w <= weightLimit ? '✅' : '❌';
