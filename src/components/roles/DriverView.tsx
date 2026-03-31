@@ -336,7 +336,7 @@ const loadWoodSettings = async () => {
       
       // Вычисляем временные метки
       const now = new Date();
-      const startDate = new Date(currentCycle.start_date || currentCycle.created_at);
+      const startDate = new Date(currentCycle.startDate || currentCycle.createdAt);
       const hoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
       
       // Получаем предыдущую историю взвешиваний
@@ -385,64 +385,46 @@ const loadWoodSettings = async () => {
       // Обновляем историю
       const updatedHistory = [...previousHistory, newWeighingRecord];
 
-      // 1. Обновляем цикл
-await fetch(
-  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
-  {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${publicAnonKey}`
-    },
-    body: JSON.stringify({
-      weighingResult: {
-        approved: result.approved,
-        weights: weights.map(w => ({ box: w.boxNumber, weight: w.weight })),
-        timestamp: now.toISOString(),
-        ...result
-      }
-    })
-  }
-);
+      // 1. Обновляем цикл (без Telegram - он отправится через api ниже)
+      await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify({
+            weighingResult: {
+              approved: result.approved,
+              weights: weights.map(w => ({ box: w.boxNumber, weight: w.weight })),
+              timestamp: now.toISOString(),
+              ...result
+            }
+          })
+        }
+      );
 
-      console.log('🔥 selectedChamber:', selectedChamber);
-console.log('🔥 sending cycleId:', selectedChamber.id);
-
-      // ✅ Отправляем в Telegram (если настроен)
+      // 2. Отправляем в Telegram (если настроен)
       try {
-  async function sendWeighingToTelegram(cycleId: string, weighingRecord: any) {
-  return fetch(
-    `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/send-telegram-weighing`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${publicAnonKey}`
-      },
-      body: JSON.stringify({
-        cycleId,
-        weighingRecord
-      })
+        await api.sendWeighingToTelegram(selectedChamber.id, newWeighingRecord);
+        console.log('[Telegram] Сообщение отправлено');
+      } catch (telegramError: any) {
+        console.log('[Telegram] Ошибка отправки (возможно не настроен):', telegramError.message);
+        // Не показываем ошибку пользователю, так как это не критично
+      }
+
+      toast.success(t('saved'));
+      setSelectedChamber(null);
+      fetchActiveChambers();
+    } catch (error) {
+      console.error('Error saving result:', error);
+      toast.error(t('error'));
+    } finally {
+      setIsSubmitting(false);
     }
-  );
-}
+  };
 
-  // если твой api возвращает fetch Response
-  if (response?.ok === false) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error('[Telegram] ❌ Ошибка ответа:', errorData);
-  } else {
-    console.log('[Telegram] ✅ Сообщение отправлено');
-  }
-
-} catch (telegramError: any) {
-  console.error('[Telegram] ❌ Ошибка отправки:', telegramError?.message || telegramError);
-  // не блокируем UX
-}
-
-toast.success(t('saved'));
-setSelectedChamber(null);
-fetchActiveChambers();
   const handleStartHold = () => {
     let progress = 0;
     const interval = setInterval(() => {
