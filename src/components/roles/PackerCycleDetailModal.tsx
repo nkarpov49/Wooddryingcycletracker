@@ -51,7 +51,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   ? [{ path: cycle.recipePhotoPath }]
   : [];
   console.log("FINAL URL:", getImageUrl(cycle.recipePhotoPath));
-  }
+  
 
 const duration = cycle.startDate && cycle.endDate 
   ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
