@@ -174,7 +174,9 @@ const toDb = (data: any) => ({
 
   final_moisture: data.finalMoisture,
   quality_rating: data.qualityRating,
-  result_photos: data.resultPhotos,
+  result_photos: Array.isArray(data.resultPhotos) 
+    ? JSON.stringify(data.resultPhotos) 
+    : data.resultPhotos,
   start_temperature: data.loadingTemp,
   avg_day_temp: data.avgDayTemp,
   avg_night_temp: data.avgNightTemp,
@@ -187,7 +189,9 @@ const toDb = (data: any) => ({
   start_date: data.startDate,
   end_date: data.endDate,
 
-  recipe_photos: data.recipePhotos,
+  recipe_photos: Array.isArray(data.recipePhotos) 
+    ? JSON.stringify(data.recipePhotos) 
+    : data.recipePhotos,
 
 
   weighing_result: data.weighingResult,
@@ -202,40 +206,57 @@ const toDb = (data: any) => ({
   weighed_at: data.weighedAt
 });
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
-const fromDb = (data: any) => ({
-  id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
+const fromDb = (data: any) => {
+  // Helper для безопасного парсинга JSON
+  const parseJsonField = (field: any) => {
+    if (!field) return [];
+    if (Array.isArray(field)) return field;
+    if (typeof field === 'string') {
+      try {
+        return JSON.parse(field);
+      } catch (e) {
+        console.error('Failed to parse JSON field:', e);
+        return [];
+      }
+    }
+    return [];
+  };
 
-  createdAt: data.created_at,
-  loadingTemp: data.start_temperature,
-  avgDayTemp: data.avg_day_temp,
-  avgNightTemp: data.avg_night_temp,
+  return {
+    id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
 
-  finalMoisture: data.final_moisture,
-  qualityRating: data.quality_rating,
-  resultPhotos: data.result_photos,
+    createdAt: data.created_at,
+    loadingTemp: data.start_temperature,
+    avgDayTemp: data.avg_day_temp,
+    avgNightTemp: data.avg_night_temp,
 
-  chamberNumber: data.chamber_number,
-  sequentialNumber: data.sequential_number,
+    finalMoisture: data.final_moisture,
+    qualityRating: data.quality_rating,
+    resultPhotos: parseJsonField(data.result_photos),
+
+    chamberNumber: data.chamber_number,
+    sequentialNumber: data.sequential_number,
 
 
-  woodType: data.wood_type_lt,
+    woodType: data.wood_type_lt,
 
-  startDate: data.start_date,
-  endDate: data.end_date,
+    startDate: data.start_date,
+    endDate: data.end_date,
 
-  recipePhotos: data.recipe_photos,
+    recipePhotos: parseJsonField(data.recipe_photos),
 
-  weighingResult: data.weighing_result,
+    weighingResult: data.weighing_result,
 
-  overallComment: data.overall_comment,
-  isTest: data.is_test,
+    overallComment: data.overall_comment,
+    isTest: data.is_test,
 
-  avgTemp: data.avg_temp,
-  maxTemp: data.max_temp,
-  minTemp: data.min_temp,
+    avgTemp: data.avg_temp,
+    maxTemp: data.max_temp,
+    minTemp: data.min_temp,
 
-  weighedAt: data.weighed_at
-});
+    weighedAt: data.weighed_at
+  };
+};
 
 
 routes.get('/cycles/active', async (c) => {
@@ -285,7 +306,13 @@ routes.get('/cycles/:id', async (c) => {
       return c.json({ error: "Cycle not found" }, 404);
     }
 
-    return c.json(fromDb(data));
+    // ✅ Преобразуем данные в frontend формат
+    const cycle = fromDb(data);
+
+    // ✅ Подписываем URL фотографий
+    const signedCycle = await signCycleUrls(cycle);
+
+    return c.json(signedCycle);
 
   } catch (error: any) {
     console.error("Error fetching cycle:", error);
@@ -696,6 +723,21 @@ routes.get('/sheets/current-work', async (c) => {
       return "Pending";
     };
 
+    // Helper для безопасного парсинга JSON
+    const parseJsonField = (field: any) => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      if (typeof field === 'string') {
+        try {
+          return JSON.parse(field);
+        } catch (e) {
+          console.error('Failed to parse JSON field:', e);
+          return [];
+        }
+      }
+      return [];
+    };
+
     const mapCycle = (cycle: any) => ({
       id: cycle.id,
       sequentialNumber: cycle.sequential_number,
@@ -704,8 +746,8 @@ routes.get('/sheets/current-work', async (c) => {
       startDate: cycle.start_date,
       endDate: cycle.end_date,
 
-      recipePhotos: cycle.recipe_photos || [],
-      resultPhotos: cycle.result_photos || [],
+      recipePhotos: parseJsonField(cycle.recipe_photos),
+      resultPhotos: parseJsonField(cycle.result_photos),
       overallComment: cycle.overall_comment,
 
       avgTemp: cycle.avg_temp,
