@@ -169,6 +169,7 @@ export const api = {
   },
   
   // Alias for getCycle for convenience
+  getActiveCycles: () => fetchWithAuth(`${BASE_URL}/cycles/active`),
   getCycleById: async (id: string) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
   },
@@ -226,10 +227,14 @@ export const api = {
     return response.json();
   },
   
-  getCurrentWork: async (): Promise<CurrentWorkCycle[]> => {
-    const response = await fetchWithAuth(`${BASE_URL}/sheets/current-work`);
-    return response.currentWork || [];
-  },
+  async getCurrentWork() {
+  const res = await fetch('https://zbhvgsdiagwvpdvqvzsc.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work');
+  const data = await res.json();
+
+  console.log("[API] RAW current work:", data);
+
+  return data; // ✅ ВАЖНО: без []
+},
   
   // Telegram Settings
   getTelegramSettings: async () => {
