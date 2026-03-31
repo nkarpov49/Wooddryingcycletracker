@@ -46,53 +46,6 @@ async function ensureBucket() {
   }
 }
 
-async function signCycleUrls(cycle: any) {
-  const extractPathFromUrl = (url: string) => {
-    try {
-      if (!url) return null;
-      const match = url.match(new RegExp(`/sign/${BUCKET_NAME}/([^?]+)`));
-      if (match && match[1]) {
-        return decodeURIComponent(match[1]);
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  };
-
-  if (cycle.recipePhotoPath) {
-    const { data } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(cycle.recipePhotoPath, 3600 * 24);
-    cycle.recipePhotoUrl = data?.signedUrl;
-  }
-  
-  if (cycle.recipePhotos && Array.isArray(cycle.recipePhotos)) {
-    for (const photo of cycle.recipePhotos) {
-      if (!photo.path && photo.url && photo.url.includes(BUCKET_NAME)) {
-        const recoveredPath = extractPathFromUrl(photo.url);
-        if (recoveredPath) photo.path = recoveredPath;
-      }
-      if (photo.path) {
-        const { data } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(photo.path, 3600 * 24);
-        photo.url = data?.signedUrl;
-      }
-    }
-  }
-  
-  if (cycle.resultPhotos && Array.isArray(cycle.resultPhotos)) {
-    for (const photo of cycle.resultPhotos) {
-      if (!photo.path && photo.url && photo.url.includes(BUCKET_NAME)) {
-        const recoveredPath = extractPathFromUrl(photo.url);
-        if (recoveredPath) photo.path = recoveredPath;
-      }
-      if (photo.path) {
-        const { data } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(photo.path, 3600 * 24);
-        photo.url = data?.signedUrl;
-      }
-    }
-  }
-  return cycle;
-}
-
 // API Routes
 const routes = new Hono();
 
@@ -797,7 +750,6 @@ routes.get('/sheets/current-work', async (c) => {
 
         if (work?.cycle) {
           try {
-            work.cycle = await signCycleUrls(work.cycle);
           } catch (e) {
             console.error('[Sheets] Ошибка подписания URL:', e);
           }
