@@ -1,4 +1,4 @@
-import { supabase } from '../../utils/supabase/client'
+import { supabase } from '../../utils/client'
 import React, { useState } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
