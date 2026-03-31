@@ -56,7 +56,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     setLightboxOpen(true);
   };
 
-  const currentPhotos = currentPhotoType === 'recipe' ? allRecipePhotos : editedResultPhotos;
+  const photosForZoomViewer = currentPhotos.map((p, idx) => ({
 
   const nextPhoto = () => {
     setCurrentPhotoIndex((prev) => (prev + 1) % currentPhotos.length);
