@@ -342,6 +342,7 @@ routes.get('/cycles/:id', async (c) => {
         }
         
         return {
+          id: record.id, // 🔥 ДОБАВИЛИ ID для удаления!
           timestamp: record.timestamp,
           hoursFromStart: record.hours_from_start,
           hoursSinceLastCheck: record.hours_since_last_check,
@@ -457,7 +458,38 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
       updated.status = "In Progress";
     }
 
-    // 💾 Сохраняем
+    // 🔥 НОВОЕ: Если передан weighingResult - сохраняем взвешивание
+    if (body.weighingResult) {
+      const weighing = body.weighingResult;
+      
+      console.log('[Cycle PUT] Сохраняем взвешивание:', weighing);
+      
+      const { error: weighingError } = await supabase
+        .from('weighing_records')
+        .insert({
+          cycle_id: id,
+          timestamp: weighing.timestamp || new Date().toISOString(),
+          weights: Array.isArray(weighing.weights) 
+            ? weighing.weights.map((w: any) => typeof w === 'object' ? w.weight : w)
+            : [],
+          weight_limit: weighing.weightLimit,
+          hours_from_start: weighing.hoursFromStart,
+          hours_since_last_check: weighing.hoursSinceLastCheck,
+          total_weight: weighing.totalWeight,
+          recommendation: weighing.recommendation,
+          recommendation_data: weighing.recommendationData || null,
+          driver_name: weighing.driverName
+        });
+      
+      if (weighingError) {
+        console.error('[Cycle PUT] Ошибка сохранения взвешивания:', weighingError);
+        // Не прерываем обновление цикла, просто логируем ошибку
+      } else {
+        console.log('[Cycle PUT] ✅ Взвешивание сохранено');
+      }
+    }
+
+    // 💾 Сохраняем цикл
     const { error: updateError } = await supabase
       .from('cycles')
       .update({
@@ -496,6 +528,32 @@ routes.delete('/cycles/:id/weighings', async (c) => {
   return c.json({
     success: true,
     message: 'All weighings deleted'
+  });
+});
+
+// 🔥 НОВЫЙ: Удаление одного взвешивания по weighingId
+routes.delete('/cycles/:cycleId/weighings/:weighingId', async (c) => {
+  const weighingId = c.req.param('weighingId');
+
+  console.log('[Delete Weighing] ID:', weighingId);
+
+  const { data, error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('id', weighingId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('[Delete Weighing] Ошибка:', error);
+    return c.json({ error: 'Weighing record not found' }, 404);
+  }
+
+  console.log('[Delete Weighing] ✅ Удалено:', data);
+
+  return c.json({
+    success: true,
+    deleted: data
   });
 });
 
@@ -1250,7 +1308,7 @@ routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
   return c.json({ message: 'disabled for now' });
 });
 
-// Ручная синхронизация (для тестирования) ✅ 
+// Ручная синхронизация (для тестирвания) ✅ 
 routes.post('/sheets/manual-sync', async (c) => {
   try {
     const body = await c.req.json() as GoogleSheetRow;
@@ -1552,29 +1610,22 @@ routes.post('/send-telegram-weighing', async (c) => {
       return c.json({ error: 'Цикл не найден' }, 404);
     }
 
-    // ✅ 3. Сохраняем взвешивание в БД
-const { data: insertData, error: insertError } = await supabase
-  .from('weighing_records')
-  .insert({
-    cycle_id: cycleId,
-    timestamp: weighingRecord.timestamp || new Date().toISOString(),
-    weights: weighingRecord.weights || [],
-    weight_limit: weighingRecord.weightLimit,
-    hours_from_start: weighingRecord.hoursFromStart,
-    recommendation: weighingRecord.recommendation,
-    recommendation_data: weighingRecord.recommendationData
-  })
-  .select();
+    // ✅ 3. ЧИТАЕМ ПОСЛЕДНЕЕ ВЗВЕШИВАНИЕ ИЗ БД (НЕ ВСТАВЛЯЕМ!)
+    const { data: latestWeighings, error: latestError } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .order('timestamp', { ascending: false })
+      .limit(1);
 
-if (insertError) {
-  console.error('❌ INSERT ERROR:', insertError);
-  return c.json({ error: insertError.message }, 500);
-}
+    if (latestError || !latestWeighings || latestWeighings.length === 0) {
+      console.error('[Telegram] Взвешивание не найдено:', latestError);
+      return c.json({ error: 'Взвешивание не найдено в базе данных' }, 404);
+    }
 
-console.log('✅ INSERT OK:', insertData);
-
-    // 🔥 ИСПОЛЬЗУЕМ ДАННЫЕ ИЗ БД (не из weighingRecord)!
-    const savedRecord = insertData[0];
+    const savedRecord = latestWeighings[0];
+    
+    console.log('[Telegram] Используем взвешивание из БД:', savedRecord.id);
     
     // 🔥 ПАРСИМ JSON поля из БД
     let weights = [];
