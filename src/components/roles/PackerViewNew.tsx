@@ -36,7 +36,7 @@ export default function PackerViewNew() {
       // Фильтрация будет происходить ниже в completedCycles
       
       console.log(`📊 Загружено циклов из API: ${data.length}`);
-      const withEndDate = data.filter((c: DryingCycle) => c.endDate);
+      const withEndDate = data.filter((c: DryingCycle) => c.end_date);
       const withCompletedStatus = data.filter((c: DryingCycle) => c.status === 'Completed');
       console.log(`  - С endDate: ${withEndDate.length}`);
       console.log(`  - Со статусом Completed: ${withCompletedStatus.length}`);
@@ -67,7 +67,18 @@ export default function PackerViewNew() {
   const fetchCurrentWork = async () => {
     try {
       const data = await api.getCurrentWork();
-      setCurrentWork(data);
+      console.log("DATA:", data);
+      console.log("LINE1:", data.line1);
+      console.log("CYCLE:", data.line1?.cycle);
+      const mapped = [
+  data.line1 ? { ...data.line1, lineId: '1' } : null,
+  data.line2 ? { ...data.line2, lineId: '2' } : null,
+  data.line3 ? { ...data.line3, lineId: '3' } : null
+].filter(Boolean);
+
+console.log("FINAL:", mapped);
+
+setCurrentWork(mapped);
     } catch (err) {
       console.error('Error fetching current work:', err);
     }
@@ -174,55 +185,80 @@ export default function PackerViewNew() {
 
   const titleKey = selectedLine === '1-2' ? 'leaderLine1And2Title' : 'leaderLine3Title';
 
-  // Filter current work based on selected line
-  const relevantWork = currentWork.filter(work => {
-    if (selectedLine === '1-2') {
-      return work.lineId === '1' || work.lineId === '2';
-    } else {
-      return work.lineId === '3';
+  // 🔥 Фильтруем текущие работы по выбранной линии
+// Важно: work.lineId мы добавили сами на фронте (в fetchCurrentWork)
+
+const relevantWork = currentWork.filter(work => {
+  // Если выбраны линии 1-2 → показываем только их
+  if (selectedLine === '1-2') {
+    return work.lineId === '1' || work.lineId === '2';
+  }
+
+  // Если выбрана линия 3 → показываем только её
+  return work.lineId === '3';
+});
+
+  // 🔥 Обработчик открытия деталей цикла
+// Загружает полный цикл (с фото и signed URLs)
+
+const handleViewDetails = async (cycle: DryingCycle) => {
+  try {
+    // ❗ Защита: если нет id — не делаем запрос
+    if (!cycle?.id) {
+      console.error('Cycle ID is missing');
+      return;
     }
-  });
 
-  const handleViewDetails = async (cycle: DryingCycle) => {
-    // Загружаем полный цикл с signed URLs для фотографий
-    try {
-      if (!cycle.id) {
-        console.error('Cycle ID is missing');
-        return;
-      }
-      
-      setLoadingModal(true);
-      const fullCycle = await api.getCycleById(cycle.id);
-      setSelectedCycle(fullCycle);
-      setDetailModalOpen(true);
-    } catch (error) {
-      console.error('Error loading cycle details:', error);
-      toast.error(t('error'));
-    } finally {
-      setLoadingModal(false);
-    }
-  };
+    setLoadingModal(true);
 
-  const handleCycleUpdate = (updatedCycle: DryingCycle) => {
-    // Обновляем цикл в списке завершённых
-    setCycles(cycles.map(c => c.id === updatedCycle.id ? { ...c, ...updatedCycle } : c));
-    
-    // Обновляем в текущих работах если там есть
-    setCurrentWork(currentWork.map(work => 
-      work.cycle?.id === updatedCycle.id 
-        ? { ...work, cycle: { ...work.cycle, ...updatedCycle } }
-        : work
-    ));
-    
-    // Обновляем выбранный цикл
-    setSelectedCycle(updatedCycle);
-  };
+    // 👉 получаем полный цикл с сервера
+    const fullCycle = await api.getCycleById(cycle.id);
 
-  const getLineLabel = (lineId: '1' | '2' | '3') => {
-    if (lineId === '1') return t('line1');
-    if (lineId === '2') return t('line2');
-    return t('line3');
-  };
+    // 👉 сохраняем в state и открываем модалку
+    setSelectedCycle(fullCycle);
+    setDetailModalOpen(true);
+
+  } catch (error) {
+    console.error('Error loading cycle details:', error);
+    toast.error(t('error'));
+  } finally {
+    setLoadingModal(false);
+  }
+};
+
+  // 🔥 Обновление цикла (например после редактирования)
+
+const handleCycleUpdate = (updatedCycle: DryingCycle) => {
+
+  // ✅ 1. Обновляем список всех циклов
+  setCycles(cycles.map(c => 
+    c.id === updatedCycle.id ? { ...c, ...updatedCycle } : c
+  ));
+
+  // ✅ 2. Обновляем currentWork (если этот цикл там есть)
+  setCurrentWork(currentWork.map(work => 
+    work.cycle?.id === updatedCycle.id
+      ? {
+          ...work,
+          cycle: {
+            ...work.cycle,
+            ...updatedCycle // 🔥 обновляем данные внутри карточки
+          }
+        }
+      : work
+  ));
+
+  // ✅ 3. Обновляем открытый модал
+  setSelectedCycle(updatedCycle);
+};
+
+  // 🔥 Получение названия линии (для UI)
+
+const getLineLabel = (lineId: '1' | '2' | '3') => {
+  if (lineId === '1') return t('line1');
+  if (lineId === '2') return t('line2');
+  return t('line3');
+};
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
@@ -276,14 +312,18 @@ export default function PackerViewNew() {
                   ? 'grid-cols-1 max-w-2xl mx-auto' 
                   : 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto'
               }`}>
-                {relevantWork.map((work, idx) => (
-                  <CurrentWorkCard
-                    key={`${work.lineId}-${work.sequentialNumber}-${idx}`}
-                    workCycle={work}
-                    lineLabel={getLineLabel(work.lineId)}
-                    onClick={() => work.cycle && handleViewDetails(work.cycle)}
-                  />
-                ))}
+                {relevantWork.map((work, idx) => {
+  console.log("RENDER WORK:", work);
+
+  return (
+    <CurrentWorkCard
+      key={`${work.lineId}-${idx}`}
+      workCycle={work}
+      lineLabel={getLineLabel(work.lineId)}
+      onClick={() => work.cycle && handleViewDetails(work.cycle)}
+    />
+  );
+})}
               </div>
             )}
           </div>
