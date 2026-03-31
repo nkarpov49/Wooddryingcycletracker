@@ -43,6 +43,7 @@ export default function CycleList() {
   const [searchByChamber, setSearchByChamber] = useState("");
   const [searchBySeqNumber, setSearchBySeqNumber] = useState("");
   
+  
   const [activeTab, setActiveTab] = useState<'actual' | 'calendar'>(storedState?.activeTab || 'actual');
   
   // Changed activeFilter (string) to activeFilters (string[])
@@ -165,21 +166,7 @@ export default function CycleList() {
   // 1. Split into Tabs
   const thirtyDaysAgo = subDays(new Date(), 30);
   
-  const tabFilteredCycles = useMemo(() => {
-      return cycles.filter(cycle => {
-          const date = cycle.startDate ? parseISO(cycle.startDate) : (cycle.createdAt ? parseISO(cycle.createdAt) : new Date(0));
-          const isRecent = isAfter(date, thirtyDaysAgo);
-          const isInProgress = cycle.status === 'In Progress';
-
-          if (activeTab === 'actual') {
-              // Actual: Recent (<30 days) OR In Progress (even if old)
-              return isRecent || isInProgress;
-          } else {
-              // Archive: Older than 30 days AND not In Progress
-              return !isRecent && !isInProgress;
-          }
-      });
-  }, [cycles, activeTab, thirtyDaysAgo]);
+  const tabFilteredCycles = cycles;
 
   const toggleFilter = (filterKey: string) => {
     if (filterKey === 'all') {
@@ -565,15 +552,23 @@ export default function CycleList() {
                                </div>
                                
                                {/* Temp */}
-                               {cycle.startTemperature !== undefined && (
-                                   <div className="flex items-center gap-1">
-                                       <CloudSun className="w-3 h-3 text-gray-400" />
-                                       {cycle.avgTemp !== undefined && isCompleted ? `${cycle.avgTemp}°` : `${cycle.startTemperature}°`}
-                                   </div>
-                               )}
+{(cycle.weather || cycle.loadingTemp != null) && (
+  <div className="flex items-center gap-1">
+    <CloudSun className="w-3 h-3 text-gray-400" />
 
+    {cycle.weather && isCompleted ? (
+      <>
+        {cycle.weather.minTemp}° / {cycle.weather.avgTemp}° / {cycle.weather.maxTemp}°
+      </>
+    ) : (
+      <>
+        {cycle.loadingTemp}°
+      </>
+    )}
+  </div>
+)}
                                {/* Moisture */}
-                               {cycle.finalMoisture !== undefined && (
+                               {cycle.finalMoisture != null && (
                                    <div className="flex items-center gap-1 font-bold text-blue-600">
                                        <Droplets className="w-3 h-3" />
                                        {cycle.finalMoisture}%
