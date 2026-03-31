@@ -147,9 +147,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   // Lightbox
   if (lightboxOpen && currentPhotos.length > 0) {
     const photosForZoomViewer = currentPhotos.map((p, idx) => ({
-      url: p.url || '',
-      caption: p.caption || (currentPhotoType === 'recipe' ? `${t('recipePhoto')} ${idx + 1}` : `${t('resultPhoto')} ${idx + 1}`)
-    }));
+  url: p.path ? getImageUrl(p.path) : p.url,
+  caption: p.caption || (currentPhotoType === 'recipe' 
+    ? `${t('recipePhoto')} ${idx + 1}` 
+    : `${t('resultPhoto')} ${idx + 1}`)
+}));
     
     return (
       <PhotoZoomViewer 
