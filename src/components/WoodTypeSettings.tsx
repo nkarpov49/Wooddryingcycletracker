@@ -12,18 +12,18 @@ type WoodTypeConfig = {
 };
 
 const DEFAULT_WOOD_TYPES: WoodTypeConfig[] = [
-  { name: 'Alksnis', weightLimit: 10.0, warmupTime: 2, dryingRateTime: 4 },
+  { name: 'Alksnis 235', weightLimit: 10.0, warmupTime: 2, dryingRateTime: 4 },
   { name: 'Beržas 235', weightLimit: 12.0, warmupTime: 2, dryingRateTime: 4 },
   { name: 'Beržas 285', weightLimit: 11.6, warmupTime: 2, dryingRateTime: 4 },
-  { name: 'Ąžuolas', weightLimit: 12.0, warmupTime: 2.5, dryingRateTime: 4 },
-  { name: 'Klevas', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
-  { name: 'Uosis', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
-  { name: 'Skroblas', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
+  { name: 'Ąžuolas 235', weightLimit: 12.0, warmupTime: 2.5, dryingRateTime: 4 },
+  { name: 'Klevas 235', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
+  { name: 'Uosis 235', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
+  { name: 'Skroblas 235', weightLimit: 12.3, warmupTime: 2, dryingRateTime: 4 },
 ];
 
 export default function WoodTypeSettings() {
   const { t, lang } = useLanguage();
-  const [configs, setConfigs] = useState<WoodTypeConfig[]>(DEFAULT_WOOD_TYPES);
+  const [configs, setConfigs] = useState<WoodTypeConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -31,28 +31,35 @@ export default function WoodTypeSettings() {
     loadConfigs();
   }, []);
 
-  const loadConfigs = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/wood-settings`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.length > 0) {
-          setConfigs(data);
-        }
+ const loadConfigs = async () => {
+  try {
+    const response = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/wood-settings`,
+      {
+        headers: { Authorization: `Bearer ${publicAnonKey}` }
       }
-    } catch (error) {
-      console.error('Error loading wood type configs:', error);
-      toast.error('Ошибка загрузки настроек');
-    } finally {
-      setLoading(false);
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        setConfigs(data);
+      } else {
+        setConfigs(DEFAULT_WOOD_TYPES);
+      }
+    } else {
+      setConfigs(DEFAULT_WOOD_TYPES);
     }
-  };
+
+  } catch (error) {
+    console.error('Error loading wood type configs:', error);
+    setConfigs(DEFAULT_WOOD_TYPES);
+    toast.error('Ошибка загрузки настроек');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleSave = async () => {
     setSaving(true);
