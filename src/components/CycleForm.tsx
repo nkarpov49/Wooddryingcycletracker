@@ -5,14 +5,13 @@ import { api, DryingCycle, CyclePhoto } from "../utils/api";
 import { toast } from "sonner@2.0.3";
 import { useLanguage } from "../utils/i18n";
 import { format, differenceInHours } from "date-fns";
+import { projectId, publicAnonKey } from "../utils/supabase/info";
 
-const WOOD_TYPES = [
-  "Birch235", "Birch285", "Alder235", "Oak235", "Ash235", "Maple235", "Scroblas235"
-];
 
 const CHAMBERS = Array.from({ length: 21 }, (_, i) => i + 1);
 
 export default function CycleForm() {
+  const [woodOptions, setWoodOptions] = useState<string[]>([]);
   const navigate = useNavigate();
   const { id } = useParams(); // If present, edit mode
   const isEditMode = !!id;
@@ -32,7 +31,7 @@ export default function CycleForm() {
     chamberNumber: 1,
     sequentialNumber: "",
     recipeCode: "",
-    woodType: WOOD_TYPES[0],
+    woodType: "",
     customWoodType: "",
     recipePhotoPath: "", // Legacy
     recipePhotoUrl: "", // Legacy
@@ -133,6 +132,30 @@ export default function CycleForm() {
       fetchWeatherStats(iso, formData.endDate);
     }
   };
+  
+  useEffect(() => {
+  async function loadWoodTypes() {
+    try {
+      const res = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/wood-settings`,
+        {
+          headers: {
+            Authorization: `Bearer ${publicAnonKey}`
+          }
+        }
+      );
+
+      const data = await res.json();
+      const names = data.map((w: any) => w.name);
+
+      setWoodOptions(names);
+    } catch (e) {
+      console.error('Ошибка загрузки пород:', e);
+    }
+  }
+
+  loadWoodTypes(); // 🔥 ВОТ ЭТОГО НЕ ХВАТАЛО
+}, []);
 
   const handleEndDateChange = (dateStr: string) => {
     if (!dateStr) {
@@ -482,22 +505,36 @@ export default function CycleForm() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('woodType')}</label>
             <select 
-              value={WOOD_TYPES.includes(formData.woodType || '') ? formData.woodType : 'Other'}
-              onChange={e => setFormData({...formData, woodType: e.target.value})}
-              className="w-full p-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500"
-            >
-              {WOOD_TYPES.map(w => <option key={w} value={w}>{w}</option>)}
-              <option value="Other">{t('other')}</option>
-            </select>
-            {(formData.woodType === 'Other' || !WOOD_TYPES.includes(formData.woodType || '')) && (
-              <input 
-                type="text"
-                value={formData.customWoodType || (WOOD_TYPES.includes(formData.woodType || '') ? '' : formData.woodType)}
-                onChange={e => setFormData({...formData, woodType: 'Other', customWoodType: e.target.value})}
-                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
-                placeholder={t('woodType')}
-              />
-            )}
+  value={
+    woodOptions.includes(formData.woodType || '')
+      ? formData.woodType
+      : 'Other'
+  }
+  onChange={e => setFormData({
+    ...formData,
+    woodType: e.target.value,
+    customWoodType: ''
+  })}
+  className="w-full p-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-amber-500"
+>
+  {woodOptions.map(w => (
+    <option key={w} value={w}>{w}</option>
+  ))}
+
+  <option value="Other">{t('other')}</option>
+</select>
+            {formData.woodType === 'Other' && (
+  <input 
+    type="text"
+    value={formData.customWoodType || ''}
+    onChange={e => setFormData({
+      ...formData,
+      customWoodType: e.target.value
+    })}
+    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+    placeholder={t('woodType')}
+  />
+)}
           </div>
 
           {/* RECIPE PHOTOS & SAVE AS BASE - Only in Edit Mode */}
