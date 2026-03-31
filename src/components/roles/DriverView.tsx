@@ -10,7 +10,7 @@ import { api } from '../../utils/api';
 type WorkCycle = {
   id: string;
   chamberNumber: number;
-  sequentialNumber: number;
+  sequentialNumber: string; // ✅ FIX
   woodType: string;
   status: string;
   recipePhotos?: string[];
@@ -23,46 +23,29 @@ type WeightData = {
 
 type WoodTypeConfig = {
   name: string;
-  weightLimit: number;      // тонны
-  warmupTime: number;        // часы
-  dryingRateTime: number;    // часы для высыхания 0.3т
+  weightLimit: number;
+  warmupTime: number;
+  dryingRateTime: number;
 };
 
-// Маппинг литовских названий на английские ключи
-const WOOD_TYPE_MAPPING: Record<string, string> = {
-  'Alksnis': 'Alder235',
-  'Beržas 235': 'Birch235',
-  'Beržas 285': 'Birch285',
-  'Ąžuolas': 'Oak235',
-  'Klevas': 'Maple235',
-  'Uosis': 'Ash235',
-  'Skroblas': 'Scroblas235'
-};
+// ✅ упрощённая и надёжная функция
+const normalize = (str: string) =>
+  str
+    .toLowerCase()
+    .replace(/\s+/g, '') // убираем все пробелы
+    .trim();
 
-// Функция для получения конфигурации породы дерева
-const getWoodConfig = (woodType: string, configs: WoodTypeConfig[]): WoodTypeConfig | undefined => {
-  // Сначала ищем напрмую (по английскому названию из цикла)
-  let config = configs.find(c => c.name === woodType);
-  
-  // Если не нашли, пробуем найти через маппинг (ключ литовский -> английское значение)
-  if (!config) {
-    const mappedName = WOOD_TYPE_MAPPING[woodType];
-    if (mappedName) {
-      config = configs.find(c => c.name === mappedName);
-    }
-  }
-  
-  // Если все еще не нашли, пробуем обратный маппинг (английское -> литовское)
-  if (!config) {
-    const reverseMappingKey = Object.keys(WOOD_TYPE_MAPPING).find(
-      key => WOOD_TYPE_MAPPING[key] === woodType
-    );
-    if (reverseMappingKey) {
-      config = configs.find(c => c.name === reverseMappingKey);
-    }
-  }
-  
-  return config;
+const getWoodConfig = (
+  woodType: string,
+  configs: WoodTypeConfig[]
+): WoodTypeConfig | undefined => {
+  if (!woodType || !configs.length) return undefined;
+
+  const normalizedType = normalize(woodType);
+
+  return configs.find(c =>
+    normalize(c.name) === normalizedType
+  );
 };
 
 export default function DriverView() {
@@ -91,36 +74,70 @@ export default function DriverView() {
 
   // Chambers 1-21
   const chambers = Array.from({ length: 21 }, (_, i) => i + 1);
+useEffect(() => {
+  let isMounted = true;
 
-  useEffect(() => {
-    loadWoodSettings();
-    fetchActiveChambers();
-  }, []);
-
-  const loadWoodSettings = async () => {
-    try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/wood-settings`,
-        {
-          headers: { Authorization: `Bearer ${publicAnonKey}` }
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Проверяем что data это массив
-        if (Array.isArray(data) && data.length > 0) {
-          setWoodConfigs(data);
-        } else {
-          console.log('No wood settings found, using defaults');
-          setWoodConfigs([]);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading wood settings:', error);
-      setWoodConfigs([]);
-    }
+  const init = async () => {
+    await loadWoodSettings();
+    await fetchActiveChambers();
   };
+
+  init();
+
+  // 🔁 авто-обновление каждые 5 сек
+  const interval = setInterval(() => {
+    loadWoodSettings();
+  }, 15000);
+
+  return () => {
+    isMounted = false;
+    clearInterval(interval);
+  };
+}, []);
+
+const loadWoodSettings = async () => {
+  try {
+    const url = `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/wood-settings?ts=${Date.now()}`;
+
+    console.log('[WoodSettings] 📥 Запрос:', url);
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${publicAnonKey}`,
+      }
+    });
+
+    if (!response.ok) {
+      console.error('[WoodSettings] ❌ Ошибка:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+
+    console.log('[WoodSettings] ✅ Получено:', data);
+
+    if (!Array.isArray(data)) {
+      console.error('[WoodSettings] ⚠️ Не массив:', data);
+      return;
+    }
+
+    // 🔥 защита от лишних обновлений (очень важно)
+    setWoodConfigs(prev => {
+      const prevStr = JSON.stringify(prev);
+      const newStr = JSON.stringify(data);
+
+      if (prevStr === newStr) {
+        return prev; // ничего не меняем → нет ререндера
+      }
+
+      console.log('[WoodSettings] 🔄 Обновление состояния');
+      return data;
+    });
+
+  } catch (error: any) {
+    console.error('[WoodSettings] ❌ Ошибка загрузки:', error.message);
+  }
+};
 
   const fetchActiveChambers = async () => {
     try {
@@ -368,26 +385,51 @@ export default function DriverView() {
       // Обновляем историю
       const updatedHistory = [...previousHistory, newWeighingRecord];
 
-      // Сохраняем обновленный цикл
-      await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            weighingHistory: updatedHistory,
-            weighingResult: {
-              approved: result.approved,
-              weights: weights.map(w => ({ box: w.boxNumber, weight: w.weight })),
-              timestamp: now.toISOString(),
-              ...result
-            }
-          })
-        }
-      );
+      // 1. Обновляем цикл (FIX ID!)
+// 1. Обновляем цикл
+await fetch(
+  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
+  {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${publicAnonKey}`
+    },
+    body: JSON.stringify({
+      weighingResult: {
+        approved: result.approved,
+        weights: weights.map(w => ({ box: w.boxNumber, weight: w.weight })),
+        timestamp: now.toISOString(),
+        ...result
+      }
+    })
+  }
+);
+
+// 2. Telegram
+await fetch(
+  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/send-telegram-weighing`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${publicAnonKey}`
+    },
+    body: JSON.stringify({
+      cycleId: selectedChamber.id, // ✅ ВОТ ТУТ ФИКС
+      weighingRecord: {
+        weights: weights.map(w => w.weight),
+        timestamp: now.toISOString(),
+        hoursFromStart: result.hoursFromStart,
+        weightLimit: result.weightLimit,
+        recommendation: result.recommendation,
+        recommendationData: result.recommendationData
+      }
+    })
+  }
+);
+      console.log('🔥 selectedChamber:', selectedChamber);
+console.log('🔥 sending cycleId:', selectedChamber.id);
 
       // ✅ Отправляем в Telegram (если настроен)
       try {
