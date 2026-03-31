@@ -47,15 +47,10 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const allRecipePhotos = (() => {
-  try {
-    return typeof cycle.recipePhotos === 'string'
-      ? JSON.parse(cycle.recipePhotos)
-      : (cycle.recipePhotos || []);
-  } catch {
-    return [];
+  const recipePhotos = cycle.recipePhotoPath
+  ? [{ path: cycle.recipePhotoPath }]
+  : [];
   }
-})();
 
 const duration = cycle.startDate && cycle.endDate 
   ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
@@ -68,14 +63,14 @@ const openLightbox = (type: 'recipe' | 'result', index: number) => {
 };
 
 const currentPhotos = currentPhotoType === 'recipe' 
-  ? allRecipePhotos 
+  ? recipePhotos
   : editedResultPhotos;
 
 const photosForZoomViewer = currentPhotos.map((p, idx) => ({
   url: getImageUrl(p.path),
-  caption: p.caption || (currentPhotoType === 'recipe' 
-    ? `${t('recipePhoto')} ${idx + 1}` 
-    : `${t('resultPhoto')} ${idx + 1}`)
+  caption: (currentPhotoType === 'recipe' 
+  ? `${t('recipePhoto')} ${idx + 1}` 
+  : `${t('resultPhoto')} ${idx + 1}`)
 }));
 
 const nextPhoto = () => {
@@ -118,7 +113,6 @@ const handleSave = async () => {
     setUploading(true);
     try {
       const { path } = await api.uploadFile(file);
-      const tempUrl = URL.createObjectURL(file);
       const newPhoto = { path, caption: '' };
       setEditedResultPhotos([...editedResultPhotos, newPhoto]);
       toast.success(lang === 'ru' ? 'Фото добавлено' : 'Nuotrauka pridėta');
@@ -159,6 +153,7 @@ const handleSave = async () => {
   const handleDeletePhoto = (index: number) => {
     setEditedResultPhotos(editedResultPhotos.filter((_, i) => i !== index));
   };
+  console.log("PHOTO PATH:", currentPhotos)
 
   // Проверка есть ли изменения
   const hasChanges = editedComment !== (cycle.overallComment || '') || 
@@ -351,30 +346,30 @@ if (lightboxOpen && currentPhotos.length > 0) {
           )}
 
           {/* Recipe Photos */}
-          {allRecipePhotos.length > 0 && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <ImageIcon className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-gray-900">{t('recipePhoto')}</h3>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {allRecipePhotos.map((photo, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => openLightbox('recipe', idx)}
-                    className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-amber-400 transition-all cursor-pointer group active:scale-95"
-                  >
-                    <img 
-  src={getImageUrl(photo.path)} 
-  alt={`Recipe ${idx}`} 
-  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
-/>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {recipePhotos.length > 0 && (
+  <div>
+    <div className="flex items-center gap-2 mb-2">
+      <ImageIcon className="w-4 h-4 text-amber-600" />
+      <h3 className="text-sm font-bold text-gray-900">{t('recipePhoto')}</h3>
+    </div>
 
+    <div className="grid grid-cols-3 gap-2">
+      {recipePhotos.map((photo, idx) => (
+        <button
+          key={idx}
+          onClick={() => openLightbox('recipe', idx)}
+          className="aspect-square bg-gray-100 rounded-xl overflow-hidden border-2 border-gray-200 hover:border-amber-400 transition-all cursor-pointer group active:scale-95"
+        >
+          <img
+            src={getImageUrl(photo.path)}
+            alt={`Recipe ${idx}`}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        </button>
+      ))}
+    </div>
+  </div>
+)}
           {/* Result Photos Section - Always Editable if allowEdit */}
           {allowEdit && (
             <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-2xl p-4">
