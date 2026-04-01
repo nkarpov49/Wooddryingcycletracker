@@ -257,24 +257,31 @@ routes.get('/cycles/active', async (c) => {
 
 routes.get('/cycles', async (c) => {
   try {
+    const limit = Number(c.req.query('limit') || 50);
+    const offset = Number(c.req.query('offset') || 0);
+
     const { data, error } = await supabase
       .from('cycles')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[SQL] Ошибка получения циклов:', error);
+      console.error('[SQL][GET /cycles] Ошибка:', error);
       return c.json({ error: error.message }, 500);
     }
 
-    // ✅ snake_case → camelCase
-    const mapped = data.map(fromDb);
+    const mapped = (data || []).map(fromDb);
 
-    // ✅ ПРОСТО возвращаем
-    return c.json(mapped);
+    return c.json({
+      data: mapped,
+      limit,
+      offset,
+      hasMore: (data || []).length === limit
+    });
 
   } catch (error: any) {
-    console.error('[Cycles] ❌ Ошибка:', error);
+    console.error('[Cycles][GET /cycles] ❌ Ошибка:', error);
     return c.json({ error: error.message }, 500);
   }
 });
