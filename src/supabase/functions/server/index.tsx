@@ -160,6 +160,7 @@ routes.get('/work-cycles', async (c) => {
   }
 });
 
+
 // ✅✅✅✅✅✅✅ KV → SQL migration completed
 // - Добавлен mapper (camelCase ↔ snake_case)
 // - Логика НЕ изменена
@@ -172,9 +173,11 @@ const toDb = (data: any) => ({
 
   final_moisture: data.finalMoisture,
   quality_rating: data.qualityRating,
+
   result_photos: Array.isArray(data.resultPhotos) 
-    ? JSON.stringify(data.resultPhotos) 
-    : data.resultPhotos,
+  ? data.resultPhotos 
+  : [],
+
   start_temperature: data.loadingTemp,
   avg_day_temp: data.avgDayTemp,
   avg_night_temp: data.avgNightTemp,
@@ -182,17 +185,14 @@ const toDb = (data: any) => ({
   chamber_number: data.chamberNumber,
   sequential_number: data.sequentialNumber,
 
-  wood_type_lt: data.woodType || data.woodTypeLt, 
+  wood_type_lt: data.woodTypeLt, 
 
   start_date: data.startDate,
   end_date: data.endDate,
 
   recipe_photos: Array.isArray(data.recipePhotos) 
-    ? JSON.stringify(data.recipePhotos) 
-    : data.recipePhotos,
-
-  // 🔥 УБРАНО: weighing_result теперь сохраняется ТОЛЬКО в weighing_records таблице
-  // weighing_result: data.weighingResult,
+  ? JSON.stringify(data.recipePhotos) 
+  : data.recipePhotos,
 
   overall_comment: data.overallComment,
   is_test: data.isTest,
@@ -203,6 +203,8 @@ const toDb = (data: any) => ({
 
   weighed_at: data.weighedAt
 });
+
+
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
   // Helper для безопасного парсинга JSON
