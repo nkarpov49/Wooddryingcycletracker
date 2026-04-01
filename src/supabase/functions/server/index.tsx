@@ -190,9 +190,9 @@ const toDb = (data: any) => ({
   start_date: data.startDate,
   end_date: data.endDate,
 
-  recipe_photos: Array.isArray(data.recipePhotos) 
-  ? JSON.stringify(data.recipePhotos) 
-  : data.recipePhotos,
+  recipe_photos: Array.isArray(data.recipePhotos)
+  ? data.recipePhotos
+  : [],
 
   overall_comment: data.overallComment,
   is_test: data.isTest,
@@ -244,6 +244,9 @@ const fromDb = (data: any) => {
   };
 };
 
+// ⚠️ LEGACY: используется OperatorView
+// ❗ НЕ ТРОГАТЬ пока фронт не переведён на /work-cycles
+// TODO: удалить после миграции
 routes.get('/cycles/active', async (c) => { 
   const { data, error } = await supabase 
   .from('cycles') 
