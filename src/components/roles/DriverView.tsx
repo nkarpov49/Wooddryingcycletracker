@@ -403,6 +403,8 @@ const loadWoodSettings = async () => {
       const updatedHistory = [...previousHistory, newWeighingRecord];
 
       // 1. Обновляем цикл и отправляем взвешивание
+      console.log('[Weighing] 🚀 Отправка на backend...');
+      
       await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
         {
@@ -418,6 +420,8 @@ const loadWoodSettings = async () => {
         }
       );
 
+      console.log('[Weighing] ✅ Backend ответил успешно');
+      
       toast.success(t('saved'));
       setSelectedChamber(null);
       fetchActiveChambers();
