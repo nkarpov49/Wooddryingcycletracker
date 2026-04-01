@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Link, useNavigationType } from "react-router";
+import { Link, useNavigationType } from "react-router-dom";
 import { 
-  Plus, CheckCircle, Clock, Info, Edit, Search, CloudSun, Calendar, ArrowUpDown, Droplets, Star, AlertTriangle, Image as ImageIcon, MessageSquare, ChevronDown, ChevronUp, Camera, XCircle, X, Filter, Eye, Scale
+  Plus, CheckCircle, Clock, Info, Edit, Search, CloudSun, Calendar, ArrowUpDown, Droplets, Star, AlertTriangle, Image as ImageIcon, MessageSquare, ChevronDown, ChevronUp, Camera, XCircle, X, Filter
 } from "lucide-react";
 import { api, DryingCycle } from "../utils/api";
 import { format, differenceInHours, subDays, parseISO, isAfter, isBefore } from "date-fns";
@@ -34,17 +34,12 @@ export default function CycleList() {
   // Initialize state from storage if available
   const [cycles, setCycles] = useState<DryingCycle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState(storedState?.searchQuery || "");
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   
-  // Advanced Search (Admin)
-  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
-  const [searchByChamber, setSearchByChamber] = useState("");
-  const [searchBySeqNumber, setSearchBySeqNumber] = useState("");
-  
-  
-  const [activeTab, setActiveTab] = useState<'actual' | 'calendar'>(storedState?.activeTab || 'actual');
+  const [activeTab, setActiveTab] = useState<'actual' | 'archive' | 'calendar'>(storedState?.activeTab || 'actual');
   
   // Changed activeFilter (string) to activeFilters (string[])
   const [activeFilters, setActiveFilters] = useState<string[]>(storedState?.activeFilters || []);
@@ -76,34 +71,35 @@ export default function CycleList() {
   // Load Data
   useEffect(() => {
     loadCycles();
-    
+  }, []);
 
   async function loadCycles(loadMore = false) {
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    const { data, hasMore } = await api.getCycles(50, loadMore ? cycles.length : 0);
+      const offset = loadMore ? cycles.length : 0;
+      const { data, hasMore } = await api.getCycles(50, offset);
 
-    setHasMore(hasMore);
+      setHasMore(hasMore);
 
-    setCycles(prev => {
-      if (!loadMore) return data;
+      setCycles(prev => {
+        if (!loadMore) return data;
 
-      // защита от дублей
-      const newData = data.filter(
-        newItem => !prev.some(p => p.id === newItem.id)
-      );
+        // защита от дублей
+        const newData = data.filter(
+          (newItem: DryingCycle) => !prev.some(p => p.id === newItem.id)
+        );
 
-      return [...prev, ...newData];
-    });
+        return [...prev, ...newData];
+      });
 
-  } catch (err) {
-    console.error(err);
-    toast.error(t('error'));
-  } finally {
-    setLoading(false);
+    } catch (err) {
+      console.error(err);
+      toast.error(t('error'));
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   // Restore Scroll Position ONLY if coming back (POP navigation)
   useEffect(() => {
@@ -144,32 +140,26 @@ export default function CycleList() {
     }
   };
 
-  const handleToggleFailed = async (e: React.MouseEvent, cycleId: string, currentStatus: boolean) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const newStatus = !currentStatus;
-    
-    // Optimistic Update
-    setCycles(prev => prev.map(c => c.id === cycleId ? { ...c, isFailed: newStatus } : c));
-    
-    try {
-        await api.markCycleAsFailed(cycleId, newStatus);
-        toast.success(newStatus ? t('markedAsWet') : t('markedAsSuccess'));
-    } catch (err) {
-        console.error(err);
-        toast.error(t('error'));
-        // Rollback on error
-        setCycles(prev => prev.map(c => c.id === cycleId ? { ...c, isFailed: currentStatus } : c));
-    }
-  };
-
   // --- Logic Helpers ---
 
   // 1. Split into Tabs
   const thirtyDaysAgo = subDays(new Date(), 30);
   
-  const tabFilteredCycles = cycles;
+  const tabFilteredCycles = useMemo(() => {
+      return cycles.filter(cycle => {
+          const date = cycle.startDate ? parseISO(cycle.startDate) : (cycle.createdAt ? parseISO(cycle.createdAt) : new Date(0));
+          const isRecent = isAfter(date, thirtyDaysAgo);
+          const isInProgress = cycle.status === 'In Progress';
+
+          if (activeTab === 'actual') {
+              // Actual: Recent (<30 days) OR In Progress (even if old)
+              return isRecent || isInProgress;
+          } else {
+              // Archive: Older than 30 days AND not In Progress
+              return !isRecent && !isInProgress;
+          }
+      });
+  }, [cycles, activeTab, thirtyDaysAgo]);
 
   const toggleFilter = (filterKey: string) => {
     if (filterKey === 'all') {
@@ -257,37 +247,23 @@ export default function CycleList() {
       }
 
       return list.sort((a, b) => {
-  const getSeq = (val: any) =>
-    parseInt(String(val || "").replace(/\D/g, "")) || 0;
-
-  switch (sortOption) {
-    case 'SeqDesc':
-      return getSeq(b.sequentialNumber) - getSeq(a.sequentialNumber);
-
-    case 'SeqAsc':
-      return getSeq(a.sequentialNumber) - getSeq(b.sequentialNumber);
-
-    case 'DateNew':
-      return new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime();
-
-    case 'QualityDesc':
-      return (b.qualityRating || 0) - (a.qualityRating || 0);
-
-    case 'DurationAsc':
-      const durA = (a.startDate && a.endDate)
-        ? differenceInHours(parseISO(a.endDate), parseISO(a.startDate))
-        : 999999;
-
-      const durB = (b.startDate && b.endDate)
-        ? differenceInHours(parseISO(b.endDate), parseISO(b.startDate))
-        : 999999;
-
-      return durA - durB;
-
-    default:
-      return 0;
-  }
-});
+          switch (sortOption) {
+              case 'SeqDesc':
+                  return (parseInt(b.sequentialNumber.replace(/\D/g,'')) || 0) - (parseInt(a.sequentialNumber.replace(/\D/g,'')) || 0);
+              case 'SeqAsc':
+                  return (parseInt(a.sequentialNumber.replace(/\D/g,'')) || 0) - (parseInt(b.sequentialNumber.replace(/\D/g,'')) || 0);
+              case 'DateNew':
+                  return new Date(b.startDate || 0).getTime() - new Date(a.startDate || 0).getTime();
+              case 'QualityDesc':
+                  return (b.qualityRating || 0) - (a.qualityRating || 0);
+              case 'DurationAsc':
+                  const durA = (a.startDate && a.endDate) ? differenceInHours(parseISO(a.endDate), parseISO(a.startDate)) : 999999;
+                  const durB = (b.startDate && b.endDate) ? differenceInHours(parseISO(b.endDate), parseISO(b.startDate)) : 999999;
+                  return durA - durB;
+              default:
+                  return 0;
+          }
+      });
   }, [filteredCycles, sortOption, activeFilters]);
 
   // Unique Wood Types for Dropdown
@@ -340,7 +316,7 @@ export default function CycleList() {
       </button>
   );
 
-  if (loading) {
+  if (loading && cycles.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-700"></div>
@@ -371,6 +347,14 @@ export default function CycleList() {
             }`}
           >
               {t('tabActual')}
+          </button>
+          <button 
+            onClick={() => setActiveTab('archive')}
+            className={`flex-1 py-2 text-sm font-bold rounded-lg transition-all ${
+                activeTab === 'archive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+              {t('tabArchive')}
           </button>
           <button 
             onClick={() => setActiveTab('calendar')}
@@ -497,9 +481,6 @@ export default function CycleList() {
             const hasRecipePhoto = recipePhotosCount > 0;
             const hasResults = cycle.finalMoisture !== undefined || cycle.qualityRating !== undefined;
             const showNotEntered = isCompleted && !hasResults;
-            
-            // Weighing Data Logic
-            const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
 
             // Date & Duration
             const dateStr = cycle.startDate 
@@ -509,17 +490,10 @@ export default function CycleList() {
 
             // Red background for low rating (< 3)
             const isLowQuality = (cycle.qualityRating || 0) > 0 && (cycle.qualityRating || 0) < 3;
-            
-            // СЫРОЕ дерево - самый яркий красный фон
-            const isWet = cycle.isFailed === true;
 
             return (
               <div key={cycle.id} className={`rounded-xl border shadow-sm overflow-hidden transition-all ${
-                  isWet 
-                    ? 'bg-red-100 border-red-400 ring-2 ring-red-300' 
-                    : isLowQuality 
-                      ? 'bg-red-50 border-red-200' 
-                      : 'bg-white border-gray-200 hover:border-amber-200'
+                  isLowQuality ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200 hover:border-amber-200'
               }`}>
                 {/* Card Header / Main Row */}
                 <Link to={`/cycle/${cycle.id}`} className="block p-3">
@@ -540,12 +514,6 @@ export default function CycleList() {
                                        TEST
                                    </span>
                                )}
-                               {cycle.isFailed && (
-                                   <span className="bg-blue-100 text-blue-700 border-2 border-blue-300 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
-                                       <Droplets className="w-3 h-3" />
-                                       {t('wet')}
-                                   </span>
-                               )}
                            </div>
 
                            <div className="flex items-center gap-3 text-xs text-gray-500">
@@ -555,23 +523,15 @@ export default function CycleList() {
                                </div>
                                
                                {/* Temp */}
-{(cycle.weather || cycle.loadingTemp != null) && (
-  <div className="flex items-center gap-1">
-    <CloudSun className="w-3 h-3 text-gray-400" />
+                               {cycle.startTemperature !== undefined && (
+                                   <div className="flex items-center gap-1">
+                                       <CloudSun className="w-3 h-3 text-gray-400" />
+                                       {cycle.avgTemp !== undefined && isCompleted ? `${cycle.avgTemp}°` : `${cycle.startTemperature}°`}
+                                   </div>
+                               )}
 
-    {cycle.weather && isCompleted ? (
-      <>
-        {cycle.weather.minTemp}° / {cycle.weather.avgTemp}° / {cycle.weather.maxTemp}°
-      </>
-    ) : (
-      <>
-        {cycle.loadingTemp}°
-      </>
-    )}
-  </div>
-)}
                                {/* Moisture */}
-                               {cycle.finalMoisture != null && (
+                               {cycle.finalMoisture !== undefined && (
                                    <div className="flex items-center gap-1 font-bold text-blue-600">
                                        <Droplets className="w-3 h-3" />
                                        {cycle.finalMoisture}%
@@ -607,14 +567,6 @@ export default function CycleList() {
                                <div className="flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 whitespace-nowrap">
                                    <Camera className="w-3 h-3" />
                                    <X className="w-2 h-2 -ml-1" />
-                               </div>
-                           )}
-                           
-                           {/* Weighing Data Badge */}
-                           {hasWeighingData && (
-                               <div className="flex items-center gap-1 text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
-                                   <Scale className="w-3 h-3" />
-                                   {cycle.weighingHistory.length}
                                </div>
                            )}
                        </div>
@@ -664,20 +616,6 @@ export default function CycleList() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                        {/* WET/DRY Toggle Button */}
-                        <button
-                          onClick={(e) => handleToggleFailed(e, cycle.id || '', cycle.isFailed || false)}
-                          className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-full transition-all border shadow-sm active:scale-95 ${
-                            isWet
-                              ? 'bg-red-500 text-white border-red-600 hover:bg-red-600'
-                              : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
-                          }`}
-                          title={isWet ? t('markAsSuccess') : t('markAsWet')}
-                        >
-                          <Droplets className={`w-3.5 h-3.5 ${isWet ? '' : 'opacity-50'}`} />
-                          {isWet && <span>{t('wet')}</span>}
-                        </button>
-                        
                         {/* Expand Comment Button */}
                         {cycle.overallComment && (
                             <button 
@@ -718,22 +656,18 @@ export default function CycleList() {
       </div>
       )}
 
-      {hasMore && (
-  <div className="flex justify-center mt-6">
-    <button
-      onClick={() => loadCycles(true)}
-      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
-    >
-      Ещё
-    </button>
-  </div>
-)}
-
-{!hasMore && (
-  <div className="text-center mt-4 text-gray-400">
-    Больше нет циклов
-  </div>
-)}
+      {/* Load More Button */}
+      {hasMore && activeTab !== 'calendar' && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => loadCycles(true)}
+            disabled={loading}
+            className="px-6 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors shadow-sm"
+          >
+            {loading ? t('loading') || 'Загрузка...' : t('loadMore') || 'Загрузить ещё'}
+          </button>
+        </div>
+      )}
 
       {/* FAB */}
       <Link 
