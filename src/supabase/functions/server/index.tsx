@@ -293,21 +293,18 @@ routes.get('/cycles', async (c) => {
 
     if (error) {
       console.error('[SQL] Ошибка получения циклов:', error);
-      return c.json({ error: error.message }, 500);
+      return c.json([]); // 🔥 ВАЖНО: всегда массив
     }
 
-    // ✅ snake_case → camelCase
-    const mapped = data.map(fromDb);
+    const mapped = (data || []).map(fromDb);
 
-    // ✅ ПРОСТО возвращаем
     return c.json(mapped);
 
   } catch (error: any) {
     console.error('[Cycles] ❌ Ошибка:', error);
-    return c.json({ error: error.message }, 500);
+    return c.json([]); // 🔥 ВАЖНО
   }
 });
-
 
 // ⚠️ LEGACY: используется OperatorView
 // ❗ НЕ ТРОГАТЬ пока фронт не переведён на /work-cycles
@@ -318,52 +315,6 @@ routes.get('/cycles/active', async (c) => {
   .select('*') 
   .eq('status', 'In Progress'); // 🔥 ВОТ ЭТО 
   return c.json(data); 
-});
-
-routes.get('/cycles', async (c) => {
-  try {
-    const { data, error } = await supabase
-      .from('cycles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('[SQL] Ошибка получения циклов:', error);
-      return c.json({ error: error.message }, 500);
-    }
-
-    // ✅ snake_case → camelCase
-    const mapped = data.map(fromDb);
-
-    // ✅ ПРОСТО возвращаем
-    return c.json(mapped);
-
-  } catch (error: any) {
-    console.error('[Cycles] ❌ Ошибка:', error);
-    return c.json({ error: error.message }, 500);
-  }
-});
-
-routes.get('/cycles/:id', async (c) => {
-  try {
-    const id = c.req.param("id");
-
-    const { data, error } = await supabase
-      .from('cycles')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error || !data) {
-      return c.json({ error: "Cycle not found" }, 404);
-    }
-
-    return c.json(fromDb(data));
-
-  } catch (error: any) {
-    console.error("Error fetching cycle:", error);
-    return c.json({ error: error.message }, 500);
-  }
 });
 
 routes.post('/cycles', async (c) => {
