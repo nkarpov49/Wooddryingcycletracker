@@ -85,22 +85,32 @@ export default function CycleList() {
     return () => clearInterval(interval);
   }, []);
 
-  async function loadCycles(silent = false) {
-    try {
-      const data = await api.getCycles();
-      
-      // Only update if data changed
-      setCycles(prevCycles => {
-        const hasChanged = JSON.stringify(data) !== JSON.stringify(prevCycles);
-        return hasChanged ? data : prevCycles;
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error(t('error'));
-    } finally {
-      setLoading(false);
-    }
+  async function loadCycles(loadMore = false) {
+  try {
+    setLoading(true);
+
+    const { data, hasMore } = await api.getCycles(50, loadMore ? cycles.length : 0);
+
+    setHasMore(hasMore);
+
+    setCycles(prev => {
+      if (!loadMore) return data;
+
+      // защита от дублей
+      const newData = data.filter(
+        newItem => !prev.some(p => p.id === newItem.id)
+      );
+
+      return [...prev, ...newData];
+    });
+
+  } catch (err) {
+    console.error(err);
+    toast.error(t('error'));
+  } finally {
+    setLoading(false);
   }
+}
 
   // Restore Scroll Position ONLY if coming back (POP navigation)
   useEffect(() => {
