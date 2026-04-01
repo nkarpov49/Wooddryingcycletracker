@@ -170,35 +170,39 @@ routes.get('/work-cycles', async (c) => {
 // - Backend теперь готов к масштабированию
 // ✅ Преобразование frontend → SQL (camelCase → snake_case)
 const toDb = (data: any) => ({
-  final_moisture: data.finalMoisture ?? null,
-  quality_rating: data.qualityRating ?? null,
+  // ❗ БЕЗ ...data
 
-  // ✅ jsonb — напрямую, без stringify
-  result_photos: Array.isArray(data.resultPhotos) ? data.resultPhotos : [],
-  recipe_photos: Array.isArray(data.recipePhotos) ? data.recipePhotos : [],
+  final_moisture: data.finalMoisture,
+  quality_rating: data.qualityRating,
 
-  start_temperature: data.loadingTemp ?? null,
-  avg_day_temp: data.avgDayTemp ?? null,
-  avg_night_temp: data.avgNightTemp ?? null,
+  result_photos: Array.isArray(data.resultPhotos) 
+  ? data.resultPhotos 
+  : [],
+
+  start_temperature: data.loadingTemp,
+  avg_day_temp: data.avgDayTemp,
+  avg_night_temp: data.avgNightTemp,
 
   chamber_number: data.chamberNumber,
   sequential_number: data.sequentialNumber,
 
-  // ❗ один источник
-  wood_type_lt: data.woodType,
+  wood_type_lt: data.woodTypeLt, 
 
-  // ✅ нормализация дат
-  start_date: data.startDate ? new Date(data.startDate).toISOString() : null,
-  end_date: data.endDate ? new Date(data.endDate).toISOString() : null,
+  start_date: data.startDate,
+  end_date: data.endDate,
 
-  overall_comment: data.overallComment ?? null,
-  is_test: Boolean(data.isTest),
+  recipe_photos: Array.isArray(data.recipePhotos)
+  ? data.recipePhotos
+  : [],
 
-  avg_temp: data.avgTemp ?? null,
-  max_temp: data.maxTemp ?? null,
-  min_temp: data.minTemp ?? null,
+  overall_comment: data.overallComment,
+  is_test: data.isTest,
 
-  weighed_at: data.weighedAt ? new Date(data.weighedAt).toISOString() : null
+  avg_temp: data.avgTemp,
+  max_temp: data.maxTemp,
+  min_temp: data.minTemp,
+
+  weighed_at: data.weighedAt
 });
 
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
@@ -206,38 +210,73 @@ const fromDb = (data: any) => {
   const safeArray = (v: any) => Array.isArray(v) ? v : [];
 
   return {
+    // ID и временные метки
     id: data.id,
-
     createdAt: data.created_at,
     updatedAt: data.updated_at,
 
-    loadingTemp: data.start_temperature,
+    // ✅ ДОБАВЛЕНО: status (критично!)
+    status: data.status || 'In Progress',
+
+    // Температуры
+    startTemperature: data.start_temperature, // ✅ ИСПРАВЛЕНО: было loadingTemp
     avgDayTemp: data.avg_day_temp,
     avgNightTemp: data.avg_night_temp,
-
-    finalMoisture: data.final_moisture,
-    qualityRating: data.quality_rating,
-
-    // ✅ jsonb приходит уже как массив
-    resultPhotos: safeArray(data.result_photos),
-    recipePhotos: safeArray(data.recipe_photos),
-
-    chamberNumber: data.chamber_number,
-    sequentialNumber: data.sequential_number,
-
-    woodType: data.wood_type_lt,
-
-    startDate: data.start_date,
-    endDate: data.end_date,
-
-    overallComment: data.overall_comment,
-    isTest: Boolean(data.is_test),
-
     avgTemp: data.avg_temp ?? null,
     maxTemp: data.max_temp ?? null,
     minTemp: data.min_temp ?? null,
 
-    weighedAt: data.weighed_at
+    // Результаты
+    finalMoisture: data.final_moisture,
+    qualityRating: data.quality_rating,
+
+    // Фотографии (массивы)
+    resultPhotos: safeArray(data.result_photos),
+    recipePhotos: safeArray(data.recipe_photos),
+
+    // ✅ ДОБАВЛЕНО: старые поля для обратной совместимости
+    recipePhotoPath: data.recipe_photo_path || null,
+    recipePhotoUrl: data.recipe_photo_url || null,
+
+    // Номера и идентификаторы
+    chamberNumber: data.chamber_number,
+    sequentialNumber: data.sequential_number || '',
+
+    // ✅ ДОБАВЛЕНО: recipeCode
+    recipeCode: data.recipe_code || '',
+
+    // Порода древесины
+    woodType: data.wood_type_lt || data.wood_type || '',
+    
+    // ✅ ДОБАВЛЕНО: customWoodType
+    customWoodType: data.custom_wood_type || null,
+
+    // Даты
+    startDate: data.start_date,
+    endDate: data.end_date,
+
+    // Комментарий
+    overallComment: data.overall_comment || null,
+
+    // Флаги
+    isTest: Boolean(data.is_test),
+    
+    // ✅ ДОБАВЛЕНО: isBaseRecipe
+    isBaseRecipe: Boolean(data.is_base_recipe),
+    
+    // ✅ ДОБАВЛЕНО: isFailed (для мокрых/неудачных циклов)
+    isFailed: Boolean(data.is_failed),
+
+    // ✅ ДОБАВЛЕНО: погода
+    startWeatherCode: data.start_weather_code || null,
+
+    // ✅ ДОБАВЛЕНО: прогресс (из Google Sheets)
+    progressPercent: data.progress_percent || null,
+
+    // Дополнительные поля
+    weighedAt: data.weighed_at || null,
+
+    // Примечание: weighingHistory загружается отдельно в getCycle по ID
   };
 };
 
