@@ -289,7 +289,12 @@ routes.get('/cycles/:id', async (c) => {
       return c.json({ error: "Cycle not found" }, 404);
     }
 
-    return c.json(fromDb(data));
+    const cycle = fromDb(data);
+
+    // 🔥 ВОЗВРАЩАЕМ ЭТО ОБРАТНО
+    const signedCycle = await signCycleUrls(cycle);
+
+    return c.json(signedCycle);
 
   } catch (error: any) {
     console.error("Error fetching cycle:", error);
