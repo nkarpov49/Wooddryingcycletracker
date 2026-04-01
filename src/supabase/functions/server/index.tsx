@@ -209,18 +209,9 @@ const toDb = (data: any) => ({
 const fromDb = (data: any) => {
   // Helper для безопасного парсинга JSON
   const parseJsonField = (field: any) => {
-    if (!field) return [];
-    if (Array.isArray(field)) return field;
-    if (typeof field === 'string') {
-      try {
-        return JSON.parse(field);
-      } catch (e) {
-        console.error('Failed to parse JSON field:', e);
-        return [];
-      }
-    }
-    return [];
-  };
+  if (!field) return [];
+  return Array.isArray(field) ? field : [];
+};
 
   return {
     id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
