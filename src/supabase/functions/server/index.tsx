@@ -30,9 +30,6 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const supabase = createClient(supabaseUrl, supabaseKey);
 const BUCKET_NAME = "make-c5bcdb1f-drying-chamber-photos";
 
-// 🔥 КЕШ для предотвращения дублирующих Telegram сообщений
-const telegramSentCache = new Map<string, number>(); // cycleId + timestamp -> time sent
-const CACHE_TTL = 60000; // 60 секунд
 // ✅✅✅✅✅
 // Helpers
 async function ensureBucket() {
