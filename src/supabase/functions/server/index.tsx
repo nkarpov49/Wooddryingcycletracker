@@ -283,45 +283,31 @@ const fromDb = (data: any) => {
   };
 };
 
-// ✅ ЗАМЕНИТЕ ВАШУ ФУНКЦИЮ fromDb НА ЭТУ в api-routes.ts
-// Она возвращает все поля, которые нужны фронтенду
-
-/* 
-ПРИМЕР ИСПОЛЬЗОВАНИЯ В ВАШЕМ ENDPOINT:
 
 routes.get('/cycles', async (c) => {
   try {
-    const limit = Number(c.req.query('limit') || 50);
-    const offset = Number(c.req.query('offset') || 0);
-
     const { data, error } = await supabase
       .from('cycles')
       .select('*')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[SQL][GET /cycles] Ошибка:', error);
+      console.error('[SQL] Ошибка получения циклов:', error);
       return c.json({ error: error.message }, 500);
     }
 
-    // ✅ Используем исправленный fromDb
-    const mapped = (data || []).map(fromDb);
+    // ✅ snake_case → camelCase
+    const mapped = data.map(fromDb);
 
-    // ✅ ВАЖНО: возвращаем объект с полями data и hasMore
-    return c.json({
-      data: mapped,
-      limit,
-      offset,
-      hasMore: (data || []).length === limit
-    });
+    // ✅ ПРОСТО возвращаем
+    return c.json(mapped);
 
   } catch (error: any) {
-    console.error('[Cycles][GET /cycles] ❌ Ошибка:', error);
+    console.error('[Cycles] ❌ Ошибка:', error);
     return c.json({ error: error.message }, 500);
   }
 });
-*/
+
 
 // ⚠️ LEGACY: используется OperatorView
 // ❗ НЕ ТРОГАТЬ пока фронт не переведён на /work-cycles
