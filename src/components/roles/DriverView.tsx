@@ -384,50 +384,22 @@ const loadWoodSettings = async () => {
       
       // Обновляем историю
       const updatedHistory = [...previousHistory, newWeighingRecord];
-      
-// 🔥 НОВЫЙ ПРАВИЛЬНЫЙ ЗАПРОС
-await fetch(
-  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/send-telegram-weighing`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${publicAnonKey}`
-    },
-    body: JSON.stringify({
-      cycleId: selectedChamber.id,
 
-      weighingRecord: {
-        timestamp: now.toISOString(),
-
-        // ✅ массив весов
-        weights: weightsArray,
-
-        // ✅ время с начала цикла
-        hoursFromStart: hoursFromStart,
-
-        // ✅ лимит веса
-        weightLimit: weightLimit,
-
-        // ✅ рекомендация
-        recommendationData: recommendationData,
-
-        // ✅ дополнительные данные (очень важно)
-        dryingHours: result.dryingHours ?? null,
-        hoursNeeded: result.hoursNeeded ?? null,
-        avgOverweight: result.avgOverweight ?? null,
-        endTime: result.endTime ?? null,
-        approved: result.approved,
-        warmupTime: result.warmupTime ?? null
-      }
-    })
-  }
-);
-
-
-      
-      // 🔥 TELEGRAM ТЕПЕРЬ ОТПРАВЛЯЕТСЯ АВТОМАТИЧЕСКИ НА BACKEND
-      // (убрали дублирующий вызов с фронтенда)
+      // 1. Обновляем цикл и отправляем взвешивание
+      await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${publicAnonKey}`
+          },
+          body: JSON.stringify({
+            // 🔥 ИСПРАВЛЕНО: Отправляем полную структуру взвешивания
+            weighingResult: newWeighingRecord
+          })
+        }
+      );
 
       toast.success(t('saved'));
       setSelectedChamber(null);
