@@ -205,44 +205,123 @@ const toDb = (data: any) => ({
 });
 
 
+// ✅ ИСПРАВЛЕННЫЙ МАППЕР для API Backend
+// Этот код нужно добавить в ваш api-routes.ts на сервере (Deno/Supabase Edge Function)
+
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
   const safeArray = (v: any) => Array.isArray(v) ? v : [];
 
   return {
+    // ID и временные метки
     id: data.id,
-
     createdAt: data.created_at,
     updatedAt: data.updated_at,
 
-    loadingTemp: data.start_temperature,
+    // ✅ ДОБАВЛЕНО: status (критично!)
+    status: data.status || 'In Progress',
+
+    // Температуры
+    startTemperature: data.start_temperature, // ✅ ИСПРАВЛЕНО: было loadingTemp
     avgDayTemp: data.avg_day_temp,
     avgNightTemp: data.avg_night_temp,
-
-    finalMoisture: data.final_moisture,
-    qualityRating: data.quality_rating,
-
-    resultPhotos: safeArray(data.result_photos),
-    recipePhotos: safeArray(data.recipe_photos),
-
-    chamberNumber: data.chamber_number,
-    sequentialNumber: data.sequential_number,
-
-    woodType: data.wood_type_lt,
-
-    startDate: data.start_date,
-    endDate: data.end_date,
-
-    overallComment: data.overall_comment,
-    isTest: Boolean(data.is_test),
-
     avgTemp: data.avg_temp ?? null,
     maxTemp: data.max_temp ?? null,
     minTemp: data.min_temp ?? null,
 
-    weighedAt: data.weighed_at
+    // Результаты
+    finalMoisture: data.final_moisture,
+    qualityRating: data.quality_rating,
+
+    // Фотографии (массивы)
+    resultPhotos: safeArray(data.result_photos),
+    recipePhotos: safeArray(data.recipe_photos),
+
+    // ✅ ДОБАВЛЕНО: старые поля для обратной совместимости
+    recipePhotoPath: data.recipe_photo_path || null,
+    recipePhotoUrl: data.recipe_photo_url || null,
+
+    // Номера и идентификаторы
+    chamberNumber: data.chamber_number,
+    sequentialNumber: data.sequential_number || '',
+
+    // ✅ ДОБАВЛЕНО: recipeCode
+    recipeCode: data.recipe_code || '',
+
+    // Порода древесины
+    woodType: data.wood_type_lt || data.wood_type || '',
+    
+    // ✅ ДОБАВЛЕНО: customWoodType
+    customWoodType: data.custom_wood_type || null,
+
+    // Даты
+    startDate: data.start_date,
+    endDate: data.end_date,
+
+    // Комментарий
+    overallComment: data.overall_comment || null,
+
+    // Флаги
+    isTest: Boolean(data.is_test),
+    
+    // ✅ ДОБАВЛЕНО: isBaseRecipe
+    isBaseRecipe: Boolean(data.is_base_recipe),
+    
+    // ✅ ДОБАВЛЕНО: isFailed (для мокрых/неудачных циклов)
+    isFailed: Boolean(data.is_failed),
+
+    // ✅ ДОБАВЛЕНО: погода
+    startWeatherCode: data.start_weather_code || null,
+
+    // ✅ ДОБАВЛЕНО: прогресс (из Google Sheets)
+    progressPercent: data.progress_percent || null,
+
+    // Дополнительные поля
+    weighedAt: data.weighed_at || null,
+
+    // Примечание: weighingHistory загружается отдельно в getCycle по ID
   };
 };
+
+// ✅ ЗАМЕНИТЕ ВАШУ ФУНКЦИЮ fromDb НА ЭТУ в api-routes.ts
+// Она возвращает все поля, которые нужны фронтенду
+
+/* 
+ПРИМЕР ИСПОЛЬЗОВАНИЯ В ВАШЕМ ENDPOINT:
+
+routes.get('/cycles', async (c) => {
+  try {
+    const limit = Number(c.req.query('limit') || 50);
+    const offset = Number(c.req.query('offset') || 0);
+
+    const { data, error } = await supabase
+      .from('cycles')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      console.error('[SQL][GET /cycles] Ошибка:', error);
+      return c.json({ error: error.message }, 500);
+    }
+
+    // ✅ Используем исправленный fromDb
+    const mapped = (data || []).map(fromDb);
+
+    // ✅ ВАЖНО: возвращаем объект с полями data и hasMore
+    return c.json({
+      data: mapped,
+      limit,
+      offset,
+      hasMore: (data || []).length === limit
+    });
+
+  } catch (error: any) {
+    console.error('[Cycles][GET /cycles] ❌ Ошибка:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+*/
 
 // ⚠️ LEGACY: используется OperatorView
 // ❗ НЕ ТРОГАТЬ пока фронт не переведён на /work-cycles
