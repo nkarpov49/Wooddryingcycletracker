@@ -467,7 +467,7 @@ routes.put('/cycles/:id', async (c) => {
     const id = c.req.param("id");
     const body = await c.req.json();
 
-    // 🔍 Получаем текущий цикл
+    // 1. Получаем цикл
     const { data: existing, error: fetchError } = await supabase
       .from('cycles')
       .select('*')
@@ -478,96 +478,95 @@ routes.put('/cycles/:id', async (c) => {
       return c.json({ error: "Cycle not found" }, 404);
     }
 
-    // 🔄 Маппим входящие данные
+    // 2. Маппинг
     const mappedBody = Object.fromEntries(
-  Object.entries(toDb(body)).filter(([_, v]) => v !== undefined)
-);
-// 🛡 нормализация даты
-if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
-  if (/^\d{2}:\d{2}$/.test(mappedBody.end_date)) {
-    const now = new Date();
-    const [h, m] = mappedBody.end_date.split(':').map(Number);
+      Object.entries(toDb(body)).filter(([_, v]) => v !== undefined)
+    );
 
-    now.setHours(h);
-    now.setMinutes(m);
-    now.setSeconds(0);
-
-    mappedBody.end_date = now.toISOString();
-  }
-}
-    // 🧠 Объединяем (как раньше в KV)
-    const updated = { ...existing, ...mappedBody };
-
-    // ✅ ЛОГИКА СТАТУСА (исправлена под SQL)
-    const hasFinalMoisture =
-      updated.final_moisture !== null &&
-      updated.final_moisture !== undefined;
-
-    const hasRating =
-      updated.quality_rating !== null &&
-      updated.quality_rating !== undefined;
-
-    const hasResultPhoto =
-      updated.result_photos &&
-      updated.result_photos.length > 0;
-
-    if (hasFinalMoisture && hasRating && hasResultPhoto) {
-      updated.status = "Completed";
-    } else {
-      updated.status = "In Progress";
+    // 3. Нормализация времени
+    if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
+      if (/^\d{2}:\d{2}$/.test(mappedBody.end_date)) {
+        const now = new Date();
+        const [h, m] = mappedBody.end_date.split(':').map(Number);
+        now.setHours(h, m, 0);
+        mappedBody.end_date = now.toISOString();
+      }
     }
 
-    // 🔥 НОВОЕ: Если передан weighingResult - сохраняем взвешивание
+    const updated = { ...existing, ...mappedBody };
+
+    // 4. Статус
+    const isCompleted =
+      updated.final_moisture != null &&
+      updated.quality_rating != null &&
+      updated.result_photos?.length > 0;
+
+    updated.status = isCompleted ? "Completed" : "In Progress";
+
+    // =====================================================
+    // 🔥 5. ВЗВЕШИВАНИЕ
+    // =====================================================
     if (body.weighingResult) {
       const weighing = body.weighingResult;
-      
-      console.log('[Cycle PUT] Сохраняем взвешивание:', weighing);
-      console.log('[Cycle PUT] 🔍 weightLimit:', weighing.weightLimit);
-      console.log('[Cycle PUT] 🔍 hoursFromStart:', weighing.hoursFromStart);
-      
-      // 🔥 НОВОЕ: Получаем weight_limit из wood_type_settings
-      let finalWeightLimit = weighing.weightLimit;
-      let finalHoursFromStart = weighing.hoursFromStart;
-      
-      // Если weightLimit не передан frontend - берём из wood_type_settings
-      if (!finalWeightLimit && existing.wood_type_lt) {
+
+      console.log('[Cycle PUT] 📦 New weighing:', weighing);
+
+      // ✅ единый timestamp
+      const realTimestamp = weighing.timestamp || new Date().toISOString();
+
+      let finalWeightLimit =
+        weighing.weightLimit != null ? Number(weighing.weightLimit) : null;
+
+      let finalHoursFromStart =
+        weighing.hoursFromStart != null ? Number(weighing.hoursFromStart) : null;
+
+      // 5.1 weight_limit из БД
+      if (finalWeightLimit == null && existing.wood_type_lt) {
+        const woodTypeClean = existing.wood_type_lt.replace(/\d+/g, '').trim();
+
         const { data: woodSettings } = await supabase
           .from('wood_type_settings')
           .select('weight_limit')
-          .eq('name', existing.wood_type_lt)
+          .eq('name', woodTypeClean)
           .single();
-        
-        if (woodSettings?.weight_limit) {
-          finalWeightLimit = parseFloat(woodSettings.weight_limit);
-          console.log('[Cycle PUT] ✅ weight_limit из БД:', finalWeightLimit);
+
+        if (woodSettings?.weight_limit != null) {
+          finalWeightLimit = Number(woodSettings.weight_limit);
+          console.log('[Cycle PUT] ✅ weight_limit from DB:', finalWeightLimit);
         }
       }
-      
-      // Если hoursFromStart не передан - вычисляем на backend
-      if (!finalHoursFromStart && existing.start_date) {
-        const now = new Date(weighing.timestamp || new Date().toISOString());
+
+      // 5.2 hours_from_start
+      if (finalHoursFromStart == null && existing.start_date) {
+        const now = new Date(realTimestamp);
         const startDate = new Date(existing.start_date);
-        finalHoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
-        console.log('[Cycle PUT] ✅ hours_from_start вычислен:', finalHoursFromStart);
+
+        finalHoursFromStart = Math.round(
+          (now.getTime() - startDate.getTime()) / 3600000
+        );
+
+        console.log('[Cycle PUT] ✅ hours_from_start calculated:', finalHoursFromStart);
       }
-      
+
+      // 5.3 insert
       const { error: weighingError } = await supabase
         .from('weighing_records')
         .insert({
           cycle_id: id,
-          timestamp: weighing.timestamp || new Date().toISOString(),
-          weights: Array.isArray(weighing.weights) 
-            ? weighing.weights.map((w: any) => typeof w === 'object' ? w.weight : w)
+          timestamp: realTimestamp,
+          weights: Array.isArray(weighing.weights)
+            ? weighing.weights.map((w: any) =>
+                typeof w === 'object' ? w.weight : w
+              )
             : [],
-          weight_limit: finalWeightLimit,              // ✅ ИСПРАВЛЕНО
-          hours_from_start: finalHoursFromStart,       // ✅ ИСПРАВЛЕНО
+          weight_limit: finalWeightLimit,
+          hours_from_start: finalHoursFromStart,
           hours_since_last_check: weighing.hoursSinceLastCheck,
           total_weight: weighing.totalWeight,
           recommendation: weighing.recommendation,
           recommendation_data: weighing.recommendationData || null,
           driver_name: weighing.driverName,
-          
-          // 🔥 ДОБАВЛЕНО: Дополнительные поля из калькулятора
+
           approved: weighing.approved,
           drying_hours: weighing.dryingHours,
           hours_needed: weighing.hoursNeeded,
@@ -576,78 +575,80 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
           end_time: weighing.endTime,
           current_time_value: weighing.currentTime
         });
-      
+
       if (weighingError) {
-        console.error('[Cycle PUT] Ошибка сохранения взвешивания:', weighingError);
-        // Не прерываем обновление цикла, просто логируем ошибку
+        console.error('[Cycle PUT] ❌ Save weighing error:', weighingError);
       } else {
-        console.log('[Cycle PUT] ✅ Взвешивание сохранено');
-        
-        // 🔥 АВТОМАТИЧЕСКАЯ ОТПРАВКА В TELEGRAM после сохранения взвешивания
+        console.log('[Cycle PUT] ✅ Weighing saved');
+
+        // =====================================================
+        // 🔥 TELEGRAM
+        // =====================================================
         try {
-          // Получаем настройки Telegram
           const { data: settingsRow } = await supabase
             .from('settings')
             .select('value')
             .eq('key', 'telegram_settings')
             .single();
-          
-          // Проверяем что Telegram настроен и включён
-          if (settingsRow?.value?.enabled && settingsRow.value.botToken && settingsRow.value.chatId) {
-            // 🔥 ЗАЩИТА ОТ ДУБЛЕЙ: проверяем кеш
-            const cacheKey = `${id}_${weighing.timestamp}`;
-            const lastSent = telegramSentCache.get(cacheKey);
+
+          console.log('[Telegram] settings:', settingsRow);
+
+          if (
+            settingsRow?.value?.enabled &&
+            settingsRow.value.botToken &&
+            settingsRow.value.chatId
+          ) {
+            const cacheKey = `${id}_${realTimestamp}`;
             const now = Date.now();
-            
-            if (lastSent && (now - lastSent) < CACHE_TTL) {
-              console.log(`[Cycle PUT] ⏭️ Пропускаем отправку в Telegram (дубль, кеш: ${Math.round((now - lastSent) / 1000)}с назад)`);
+            const lastSent = telegramSentCache.get(cacheKey);
+
+            if (lastSent && now - lastSent < CACHE_TTL) {
+              console.log(`[Cycle PUT] ⏭️ Skip Telegram (${Math.round((now - lastSent)/1000)}s ago)`);
             } else {
-              console.log('[Cycle PUT] 📤 Отправляем в Telegram...');
-              
-              // Вызываем внутреннюю функцию отправки
+              console.log('[Cycle PUT] 📤 Sending Telegram...');
+
               await sendWeighingToTelegram(id, settingsRow.value);
-              
-              // Сохраняем в кеш
+
               telegramSentCache.set(cacheKey, now);
-              
-              // Очищаем старые записи из кеша (старше 5 минут)
+
+              // очистка кеша
               for (const [key, time] of telegramSentCache.entries()) {
-                if (now - time > 300000) {
+                if (now - time > CACHE_TTL) {
                   telegramSentCache.delete(key);
                 }
               }
-              
-              console.log('[Cycle PUT] ✅ Telegram отправлен успешно');
+
+              console.log('[Cycle PUT] ✅ Telegram sent');
             }
           } else {
-            console.log('[Cycle PUT] ℹ️ Telegram не настроен или выключен, пропускаем отправку');
+            console.log('[Cycle PUT] ℹ️ Telegram disabled');
           }
         } catch (telegramError: any) {
-          console.error('[Cycle PUT] ⚠️ Ошибка Telegram (не критично):', telegramError.message);
-          // Не прерываем выполнение, просто логируем
+          console.error('[Cycle PUT] ⚠️ Telegram error:', telegramError);
         }
       }
     }
 
-    // 💾 Сохраняем цикл
+    // =====================================================
+    // 6. UPDATE CYCLE
+    // =====================================================
     const { error: updateError } = await supabase
       .from('cycles')
       .update({
-  ...mappedBody,
-  status: updated.status
-})
+        ...mappedBody,
+        status: updated.status
+      })
       .eq('id', id);
 
     if (updateError) {
-      console.error('[SQL] Ошибка обновления:', updateError);
+      console.error('[SQL] ❌ Update error:', updateError);
       return c.json({ error: updateError.message }, 500);
     }
 
-    // 📤 Возвращаем в frontend формате
     return c.json(fromDb(updated));
 
   } catch (error: any) {
-    console.error("Error updating cycle:", error);
+    console.error("❌ Critical error:", error);
     return c.json({ error: error.message }, 500);
   }
 });
