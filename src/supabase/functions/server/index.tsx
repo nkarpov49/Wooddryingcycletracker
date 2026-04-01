@@ -478,7 +478,16 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
           total_weight: weighing.totalWeight,
           recommendation: weighing.recommendation,
           recommendation_data: weighing.recommendationData || null,
-          driver_name: weighing.driverName
+          driver_name: weighing.driverName,
+          
+          // 🔥 ДОБАВЛЕНО: Дополнительные поля из калькулятора
+          approved: weighing.approved,
+          drying_hours: weighing.dryingHours,
+          hours_needed: weighing.hoursNeeded,
+          avg_overweight: weighing.avgOverweight,
+          warmup_time: weighing.warmupTime,
+          end_time: weighing.endTime,
+          current_time_value: weighing.currentTime
         });
       
       if (weighingError) {
