@@ -19,7 +19,6 @@ export interface CyclePhoto {
 }
 
 export interface WeighingRecord {
-  id?: string; // 🔥 ДОБАВЛЕНО: ID взвешивания из БД
   timestamp: string; // ISO дата и время взвешивания
   hoursFromStart: number; // Часов с момента старта цикла
   hoursSinceLastCheck?: number; // Часов с последней проверки (если не первое)
@@ -161,14 +160,9 @@ export const api = {
     });
   },
 
-  getCycles: async (limit: number = 50, offset: number = 0) => {
-  const response = await fetchWithAuth(`${BASE_URL}/cycles?limit=${limit}&offset=${offset}`);
-  // Backend returns { data, limit, offset, hasMore }
-  return {
-    data: response.data || [],
-    hasMore: response.hasMore || false
-  };
-},
+  getCycles: async () => {
+    return fetchWithAuth(`${BASE_URL}/cycles`);
+  },
   
   getCycle: async (id: string) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
@@ -199,13 +193,11 @@ export const api = {
   },
   
   clearWeighingHistory: async (id: string) => {
-    // 🔥 ИСПРАВЛЕНО: правильный endpoint для очистки истории
-    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighings`, { method: 'DELETE' });
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history`, { method: 'DELETE' });
   },
   
-  // 🔥 ИСПРАВЛЕНО: удаление по weighingId вместо индекса
-  deleteWeighingRecord: async (cycleId: string, weighingId: string) => {
-    return fetchWithAuth(`${BASE_URL}/cycles/${cycleId}/weighings/${weighingId}`, { method: 'DELETE' });
+  deleteWeighingRecord: async (id: string, index: number) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history/${index}`, { method: 'DELETE' });
   },
   
   // Mark cycle as failed/wet
@@ -236,18 +228,12 @@ export const api = {
   },
   
   async getCurrentWork() {
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work?ts=${Date.now()}`,
-    {
-      cache: 'no-store'
-    }
-  );
-
+  const res = await fetch('https://zbhvgsdiagwvpdvqvzsc.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work');
   const data = await res.json();
 
   console.log("[API] RAW current work:", data);
 
-  return data;
+  return data; // ✅ ВАЖНО: без []
 },
   
   // Telegram Settings
@@ -269,4 +255,11 @@ export const api = {
     });
   },
   
+  // Send weighing info to Telegram
+  sendWeighingToTelegram: async (cycleId: string, weighingRecord: WeighingRecord) => {
+    return fetchWithAuth(`${BASE_URL}/send-telegram-weighing`, {
+      method: 'POST',
+      body: JSON.stringify({ cycleId, weighingRecord }),
+    });
+  },
 };
