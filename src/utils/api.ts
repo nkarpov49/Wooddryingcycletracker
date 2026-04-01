@@ -161,9 +161,14 @@ export const api = {
     });
   },
 
-  getCycles: async () => {
-    return fetchWithAuth(`${BASE_URL}/cycles`);
-  },
+  getCycles: async (limit: number = 50, offset: number = 0) => {
+  const response = await fetchWithAuth(`${BASE_URL}/cycles?limit=${limit}&offset=${offset}`);
+  // Backend returns { data, limit, offset, hasMore }
+  return {
+    data: response.data || [],
+    hasMore: response.hasMore || false
+  };
+},
   
   getCycle: async (id: string) => {
     return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
