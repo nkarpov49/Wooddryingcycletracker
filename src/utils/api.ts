@@ -19,6 +19,7 @@ export interface CyclePhoto {
 }
 
 export interface WeighingRecord {
+  id?: string; // 🔥 ДОБАВЛЕНО: ID взвешивания из БД
   timestamp: string; // ISO дата и время взвешивания
   hoursFromStart: number; // Часов с момента старта цикла
   hoursSinceLastCheck?: number; // Часов с последней проверки (если не первое)
@@ -193,11 +194,13 @@ export const api = {
   },
   
   clearWeighingHistory: async (id: string) => {
-    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history`, { method: 'DELETE' });
+    // 🔥 ИСПРАВЛЕНО: правильный endpoint для очистки истории
+    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighings`, { method: 'DELETE' });
   },
   
-  deleteWeighingRecord: async (id: string, index: number) => {
-    return fetchWithAuth(`${BASE_URL}/cycles/${id}/weighing-history/${index}`, { method: 'DELETE' });
+  // 🔥 ИСПРАВЛЕНО: удаление по weighingId вместо индекса
+  deleteWeighingRecord: async (cycleId: string, weighingId: string) => {
+    return fetchWithAuth(`${BASE_URL}/cycles/${cycleId}/weighings/${weighingId}`, { method: 'DELETE' });
   },
   
   // Mark cycle as failed/wet
