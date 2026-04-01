@@ -1,4 +1,4 @@
-// ✅ MIGRATED TO SQL - VERSION 3.0 TELEGRAM FIX
+// ✅ MIGRATED TO SQL
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -10,14 +10,6 @@ const app = new Hono();
 
 // Enable logger
 app.use('*', logger((message) => console.log(message)));
-
-// ✅ Добавим детальное логирование всех запросов
-app.use('*', async (c, next) => {
-  const method = c.req.method;
-  const path = c.req.path;
-  console.log(`\n🔵 [${method}] ${path}`);
-  await next();
-});
 
 // Enable CORS
 app.use(
@@ -182,7 +174,9 @@ const toDb = (data: any) => ({
 
   final_moisture: data.finalMoisture,
   quality_rating: data.qualityRating,
-  result_photos: data.resultPhotos,
+  result_photos: Array.isArray(data.resultPhotos) 
+    ? JSON.stringify(data.resultPhotos) 
+    : data.resultPhotos,
   start_temperature: data.loadingTemp,
   avg_day_temp: data.avgDayTemp,
   avg_night_temp: data.avgNightTemp,
@@ -195,8 +189,12 @@ const toDb = (data: any) => ({
   start_date: data.startDate,
   end_date: data.endDate,
 
-  recipe_photos: data.recipePhotos,
+  recipe_photos: Array.isArray(data.recipePhotos) 
+    ? JSON.stringify(data.recipePhotos) 
+    : data.recipePhotos,
 
+
+  weighing_result: data.weighingResult,
 
   overall_comment: data.overallComment,
   is_test: data.isTest,
@@ -209,28 +207,20 @@ const toDb = (data: any) => ({
 });
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
-  // ✅ Парсим JSON если это строка, иначе используем как есть
-  let recipePhotos = data.recipe_photos;
-  if (typeof recipePhotos === 'string') {
-    try {
-      recipePhotos = JSON.parse(recipePhotos);
-    } catch (e) {
-      console.error('[fromDb] Ошибка парсинга recipe_photos:', e);
-      recipePhotos = [];
+  // Helper для безопасного парсинга JSON
+  const parseJsonField = (field: any) => {
+    if (!field) return [];
+    if (Array.isArray(field)) return field;
+    if (typeof field === 'string') {
+      try {
+        return JSON.parse(field);
+      } catch (e) {
+        console.error('Failed to parse JSON field:', e);
+        return [];
+      }
     }
-  }
-  recipePhotos = Array.isArray(recipePhotos) ? recipePhotos : [];
-  
-  let resultPhotos = data.result_photos;
-  if (typeof resultPhotos === 'string') {
-    try {
-      resultPhotos = JSON.parse(resultPhotos);
-    } catch (e) {
-      console.error('[fromDb] Ошибка парсинга result_photos:', e);
-      resultPhotos = [];
-    }
-  }
-  resultPhotos = Array.isArray(resultPhotos) ? resultPhotos : [];
+    return [];
+  };
 
   return {
     id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
@@ -242,18 +232,20 @@ const fromDb = (data: any) => {
 
     finalMoisture: data.final_moisture,
     qualityRating: data.quality_rating,
-    resultPhotos: resultPhotos,
+    resultPhotos: parseJsonField(data.result_photos),
 
     chamberNumber: data.chamber_number,
     sequentialNumber: data.sequential_number,
+
 
     woodType: data.wood_type_lt,
 
     startDate: data.start_date,
     endDate: data.end_date,
 
-    recipePhotos: recipePhotos,
+    recipePhotos: parseJsonField(data.recipe_photos),
 
+    weighingResult: data.weighing_result,
 
     overallComment: data.overall_comment,
     isTest: data.is_test,
@@ -262,9 +254,7 @@ const fromDb = (data: any) => {
     maxTemp: data.max_temp,
     minTemp: data.min_temp,
 
-    weighedAt: data.weighed_at,
-    
-    status: data.status
+    weighedAt: data.weighed_at
   };
 };
 
@@ -290,18 +280,91 @@ routes.get('/cycles', async (c) => {
       return c.json({ error: error.message }, 500);
     }
 
-    // ✅ snake_case → camelCase + генерация signed URLs
+    // ✅ snake_case → camelCase
     const mapped = data.map(fromDb);
-    
-    // ✅ Генерируем signed URLs для каждого цикла
-    const withSignedUrls = await Promise.all(
-      mapped.map(async (cycle) => await signCycleUrls(cycle))
-    );
 
-    return c.json(withSignedUrls);
+    // ✅ ПРОСТО возвращаем
+    return c.json(mapped);
 
   } catch (error: any) {
     console.error('[Cycles] ❌ Ошибка:', error);
+    return c.json({ error: error.message }, 500);
+  }
+});
+
+routes.get('/cycles/:id', async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const { data, error } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error || !data) {
+      return c.json({ error: "Cycle not found" }, 404);
+    }
+
+    // ✅ Преобразуем данные в frontend формат
+    const cycle = fromDb(data);
+
+    // ✅ Загружаем историю взвешиваний из weighing_records
+    const { data: weighingRecords } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', id)
+      .order('timestamp', { ascending: true });
+
+    // Преобразуем weighing_records в формат weighingHistory с ПАРСИНГОМ JSON
+    if (weighingRecords && weighingRecords.length > 0) {
+      cycle.weighingHistory = weighingRecords.map((record: any) => {
+        // 🔥 ПАРСИМ JSON поля из БД (PostgreSQL JSONB возвращается как строки)
+        let weights = [];
+        let recommendationData = null;
+        
+        try {
+          weights = typeof record.weights === 'string' 
+            ? JSON.parse(record.weights) 
+            : (record.weights || []);
+        } catch (e) {
+          console.error('[Cycle] Ошибка парсинга weights:', e);
+          weights = [];
+        }
+        
+        try {
+          recommendationData = typeof record.recommendation_data === 'string'
+            ? JSON.parse(record.recommendation_data)
+            : record.recommendation_data;
+        } catch (e) {
+          console.error('[Cycle] Ошибка парсинга recommendation_data:', e);
+          recommendationData = null;
+        }
+        
+        return {
+          id: record.id, // 🔥 ДОБАВИЛИ ID для удаления!
+          timestamp: record.timestamp,
+          hoursFromStart: record.hours_from_start,
+          hoursSinceLastCheck: record.hours_since_last_check,
+          weights: weights,
+          totalWeight: record.total_weight,
+          weightLimit: record.weight_limit,
+          recommendation: record.recommendation,
+          recommendationData: recommendationData,
+          driverName: record.driver_name
+        };
+      });
+    } else {
+      cycle.weighingHistory = [];
+    }
+
+    // ✅ Подписываем URL фотографий
+    const signedCycle = await signCycleUrls(cycle);
+
+    return c.json(signedCycle);
+
+  } catch (error: any) {
+    console.error("Error fetching cycle:", error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -338,73 +401,6 @@ routes.post('/cycles', async (c) => {
     console.error("Error creating cycle:", error);
     return c.json({ error: error.message }, 500);
   }
-});
-
-// ✅ СПЕЦИФИЧНЫЕ МАРШРУТЫ ДОЛЖНЫ БЫТЬ ПЕРЕД ОБЩИМИ!
-routes.delete('/cycles/:id/weighings', async (c) => {
-  const cycleId = c.req.param('id');
-
-  if (!cycleId) {
-    return c.json({ error: 'cycleId is required' }, 400);
-  }
-
-  console.log('[DELETE WEIGHINGS] cycleId:', cycleId);
-
-  const { error } = await supabase
-    .from('weighing_records')
-    .delete()
-    .eq('cycle_id', cycleId);
-
-  if (error) {
-    console.error('[DELETE WEIGHINGS] error:', error);
-    return c.json({ error: error.message }, 500);
-  }
-
-  return c.json({
-    success: true,
-    message: 'All weighings deleted'
-  });
-});
-
-routes.delete('/weighings/:id', async (c) => {
-  const id = c.req.param('id');
-
-  if (!id) {
-    return c.json({ error: 'Weighing ID is required' }, 400);
-  }
-
-  console.log('[DELETE weighing] id:', id);
-
-  // Проверим, существует ли запись (необязательно, но полезно)
-  const { data: existing, error: fetchError } = await supabase
-    .from('weighing_records')
-    .select('id, cycle_id')
-    .eq('id', id)
-    .single();
-
-  if (fetchError || !existing) {
-    console.log('[DELETE weighing] Not found:', fetchError);
-    return c.json({ error: 'Weighing not found' }, 404);
-  }
-
-  // Удаляем запись
-  const { error: deleteError } = await supabase
-    .from('weighing_records')
-    .delete()
-    .eq('id', id);
-
-  if (deleteError) {
-    console.error('[DELETE weighing] Delete error:', deleteError);
-    return c.json({ error: deleteError.message }, 500);
-  }
-
-  console.log('[DELETE weighing] ✅ Deleted:', id);
-
-  return c.json({
-    success: true,
-    deletedId: id,
-    cycleId: existing.cycle_id
-  });
 });
 
 routes.put('/cycles/:id', async (c) => {
@@ -462,7 +458,63 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
       updated.status = "In Progress";
     }
 
-    // 💾 Сохраняем
+    // 🔥 НОВОЕ: Если передан weighingResult - сохраняем взвешивание
+    if (body.weighingResult) {
+      const weighing = body.weighingResult;
+      
+      console.log('[Cycle PUT] Сохраняем взвешивание:', weighing);
+      
+      const { error: weighingError } = await supabase
+        .from('weighing_records')
+        .insert({
+          cycle_id: id,
+          timestamp: weighing.timestamp || new Date().toISOString(),
+          weights: Array.isArray(weighing.weights) 
+            ? weighing.weights.map((w: any) => typeof w === 'object' ? w.weight : w)
+            : [],
+          weight_limit: weighing.weightLimit,
+          hours_from_start: weighing.hoursFromStart,
+          hours_since_last_check: weighing.hoursSinceLastCheck,
+          total_weight: weighing.totalWeight,
+          recommendation: weighing.recommendation,
+          recommendation_data: weighing.recommendationData || null,
+          driver_name: weighing.driverName
+        });
+      
+      if (weighingError) {
+        console.error('[Cycle PUT] Ошибка сохранения взвешивания:', weighingError);
+        // Не прерываем обновление цикла, просто логируем ошибку
+      } else {
+        console.log('[Cycle PUT] ✅ Взвешивание сохранено');
+        
+        // 🔥 АВТОМАТИЧЕСКАЯ ОТПРАВКА В TELEGRAM после сохранения взвешивания
+        try {
+          // Получаем настройки Telegram
+          const { data: settingsRow } = await supabase
+            .from('settings')
+            .select('value')
+            .eq('key', 'telegram_settings')
+            .single();
+          
+          // Проверяем что Telegram настроен и включён
+          if (settingsRow?.value?.enabled && settingsRow.value.botToken && settingsRow.value.chatId) {
+            console.log('[Cycle PUT] 📤 Отправляем в Telegram...');
+            
+            // Вызываем внутреннюю функцию отправки
+            await sendWeighingToTelegram(id, settingsRow.value);
+            
+            console.log('[Cycle PUT] ✅ Telegram отправлен успешно');
+          } else {
+            console.log('[Cycle PUT] ℹ️ Telegram не настроен или выключен, пропускаем отправку');
+          }
+        } catch (telegramError: any) {
+          console.error('[Cycle PUT] ⚠️ Ошибка Telegram (не критично):', telegramError.message);
+          // Не прерываем выполнение, просто логируем
+        }
+      }
+    }
+
+    // 💾 Сохраняем цикл
     const { error: updateError } = await supabase
       .from('cycles')
       .update({
@@ -485,100 +537,71 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
   }
 });
 
-// ⚠️ ОБЩИЕ МАРШРУТЫ (с :id) ДОЛЖНЫ БЫТЬ В КОНЦЕ!
-routes.get('/cycles/:id', async (c) => {
-  try {
-    const id = c.req.param("id");
 
-    if (!id) {
-      return c.json({ error: "Cycle ID is required" }, 400);
-    }
+routes.delete('/cycles/:id/weighings', async (c) => {
+  const cycleId = c.req.param('id');
 
-    // 🔹 Получаем цикл
-    const { data: cycle, error } = await supabase
-      .from('cycles')
-      .select('*')
-      .eq('id', id)
-      .single();
+  const { error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('cycle_id', cycleId);
 
-    if (error || !cycle) {
-      return c.json({ error: "Cycle not found" }, 404);
-    }
-
-    // 🔹 Получаем взвешивания
-    const { data: weighingRecords, error: weighingError } = await supabase
-      .from('weighing_records')
-      .select('*')
-      .eq('cycle_id', id)
-      .order('timestamp', { ascending: true });
-
-    if (weighingError) {
-      console.error('[GET weighing_records] error:', weighingError);
-    }
-
-    // 🔹 Преобразуем данные
-    const weighingHistory = (weighingRecords || []).map((record: any) => {
-      let weights = record.weights;
-
-      // ✅ Парсим если строка
-      if (typeof weights === 'string') {
-        try {
-          weights = JSON.parse(weights);
-        } catch (e) {
-          console.error('[weights parse error]', e);
-          weights = [];
-        }
-      }
-
-      weights = Array.isArray(weights) ? weights : [];
-
-      return {
-        id: record.id, // 🔥 ОБЯЗАТЕЛЬНО (для delete)
-
-        timestamp: record.timestamp,
-        hoursFromStart: record.hours_from_start,
-
-        weights: weights,
-
-        totalWeight: weights.reduce(
-          (sum: number, w: any) => sum + Number(w || 0),
-          0
-        ),
-
-        weightLimit: record.weight_limit,
-
-        recommendation: record.recommendation,
-        recommendationData: record.recommendation_data,
-
-        // 🔥 новые поля
-        dryingHours: record.drying_hours,
-        hoursNeeded: record.hours_needed,
-        avgOverweight: record.avg_overweight,
-        approved: record.approved,
-        warmupTime: record.warmup_time,
-
-        // ⚠️ можно оставить временно
-        endTime: record.end_time,
-        currentTime: record.current_time_value,
-      };
-    });
-
-    // 🔹 Собираем цикл
-    const cycleWithHistory = {
-      ...fromDb(cycle),
-      weighingHistory
-    };
-
-    // 🔹 Подписываем фото
-    const cycleWithSignedUrls = await signCycleUrls(cycleWithHistory);
-
-    return c.json(cycleWithSignedUrls);
-
-  } catch (error: any) {
-    console.error("Error fetching cycle:", error);
+  if (error) {
     return c.json({ error: error.message }, 500);
   }
+
+  return c.json({
+    success: true,
+    message: 'All weighings deleted'
+  });
 });
+
+// 🔥 НОВЫЙ: Удаление одного взвешивания по weighingId
+routes.delete('/cycles/:cycleId/weighings/:weighingId', async (c) => {
+  const weighingId = c.req.param('weighingId');
+
+  console.log('[Delete Weighing] ID:', weighingId);
+
+  const { data, error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('id', weighingId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.error('[Delete Weighing] Ошибка:', error);
+    return c.json({ error: 'Weighing record not found' }, 404);
+  }
+
+  console.log('[Delete Weighing] ✅ Удалено:', data);
+
+  return c.json({
+    success: true,
+    deleted: data
+  });
+});
+
+routes.delete('/weighings/:id', async (c) => {
+  const id = c.req.param('id');
+
+  const { data, error } = await supabase
+    .from('weighing_records')
+    .delete()
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({
+    success: true,
+    deleted: data
+  });
+});
+
 
 routes.delete('/cycles/:id', async (c) => {
   try {
@@ -831,49 +854,39 @@ routes.get('/sheets/current-work', async (c) => {
       return "Pending";
     };
 
-    const mapCycle = (cycle: any) => {
-      // ✅ Парсим JSON если это строка, иначе используем как есть
-      let recipePhotos = cycle.recipe_photos;
-      if (typeof recipePhotos === 'string') {
+    // Helper для безопасного парсинга JSON
+    const parseJsonField = (field: any) => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      if (typeof field === 'string') {
         try {
-          recipePhotos = JSON.parse(recipePhotos);
+          return JSON.parse(field);
         } catch (e) {
-          console.error('[mapCycle] Ошибка парсинга recipe_photos:', e);
-          recipePhotos = [];
+          console.error('Failed to parse JSON field:', e);
+          return [];
         }
       }
-      recipePhotos = Array.isArray(recipePhotos) ? recipePhotos : [];
-      
-      let resultPhotos = cycle.result_photos;
-      if (typeof resultPhotos === 'string') {
-        try {
-          resultPhotos = JSON.parse(resultPhotos);
-        } catch (e) {
-          console.error('[mapCycle] Ошибка парсинга result_photos:', e);
-          resultPhotos = [];
-        }
-      }
-      resultPhotos = Array.isArray(resultPhotos) ? resultPhotos : [];
-      
-      return {
-        id: cycle.id,
-        sequentialNumber: cycle.sequential_number,
-        woodType: cycle.wood_type_lt,
-        chamberNumber: cycle.chamber_number,
-        startDate: cycle.start_date,
-        endDate: cycle.end_date,
-
-        recipePhotos: recipePhotos,
-        resultPhotos: resultPhotos,
-        overallComment: cycle.overall_comment,
-
-        avgTemp: cycle.avg_temp,
-        maxTemp: cycle.max_temp,
-        minTemp: cycle.min_temp,
-
-        status: getStatus(cycle)
-      };
+      return [];
     };
+
+    const mapCycle = (cycle: any) => ({
+      id: cycle.id,
+      sequentialNumber: cycle.sequential_number,
+      woodType: cycle.wood_type_lt,
+      chamberNumber: cycle.chamber_number,
+      startDate: cycle.start_date,
+      endDate: cycle.end_date,
+
+      recipePhotos: parseJsonField(cycle.recipe_photos),
+      resultPhotos: parseJsonField(cycle.result_photos),
+      overallComment: cycle.overall_comment,
+
+      avgTemp: cycle.avg_temp,
+      maxTemp: cycle.max_temp,
+      minTemp: cycle.min_temp,
+
+      status: getStatus(cycle)
+    });
 
     // 1. current_work
     const { data: rows, error } = await supabase
@@ -1320,7 +1333,7 @@ routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
   return c.json({ message: 'disabled for now' });
 });
 
-// Ручная синхронизация (для тестирования) ✅ 
+// Ручная синхронизация (для тестирвания) ✅ 
 routes.post('/sheets/manual-sync', async (c) => {
   try {
     const body = await c.req.json() as GoogleSheetRow;
@@ -1387,6 +1400,18 @@ routes.post('/wood-settings', async (c) => {
       return c.json({ error: 'Неверный формат данных' }, 400);
     }
 
+    // 1. Удаляем старые данные
+    const { error: deleteError } = await supabase
+      .from('wood_type_settings')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // удаляем всё
+
+    if (deleteError) {
+      console.error('[WoodSettings] Ошибка удаления:', deleteError);
+      return c.json({ error: deleteError.message }, 500);
+    }
+
+    // 2. Подготавливаем данные под SQL
     const formatted = body.map((item: any) => ({
       name: item.name,
       warmup_time: item.warmupTime,
@@ -1394,13 +1419,14 @@ routes.post('/wood-settings', async (c) => {
       drying_rate_time: item.dryingRateTime,
     }));
 
-    const { error } = await supabase
+    // 3. Вставляем новые
+    const { error: insertError } = await supabase
       .from('wood_type_settings')
-      .upsert(formatted, { onConflict: 'name' });
+      .insert(formatted);
 
-    if (error) {
-      console.error('[WoodSettings] Ошибка upsert:', error);
-      return c.json({ error: error.message }, 500);
+    if (insertError) {
+      console.error('[WoodSettings] Ошибка вставки:', insertError);
+      return c.json({ error: insertError.message }, 500);
     }
 
     console.log('[WoodSettings] Успешно сохранено:', formatted.length);
@@ -1410,6 +1436,7 @@ routes.post('/wood-settings', async (c) => {
     console.error('[WoodSettings] Ошибка сохранения:', error);
     return c.json({ error: error.message }, 500);
   }
+  console.log('🔥 POST /wood-settings CALLED');
 });
 
 // Проверка общего пароля приложения ✅ 
@@ -1569,230 +1596,431 @@ routes.post('/telegram-settings', async (c) => {
   }
 });
 
-// Отправить информацию о взвешивании в Telegram 
-routes.post('/send-telegram-weighing', async (c) => {
+// 🔥 HELPER: Отправка взвешивания в Telegram (вынесена в отдельную функцию)
+async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
   try {
-    const body = await c.req.json();
-    const { cycleId, weighingRecord, cycleData } = body;
+    console.log('[Telegram] 📤 Начало отправки для цикла:', cycleId);
+    
+    // 1. Получаем цикл
+    const { data: cycle, error: cycleError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', cycleId)
+      .single();
 
-    if (!cycleId || !weighingRecord) {
-      return c.json({ error: 'Missing required fields: cycleId or weighingRecord' }, 400);
+    if (cycleError || !cycle) {
+      console.error('[Telegram] ❌ Цикл не найден:', cycleError);
+      return;
+    }
+    
+    // 🔥 ПРОВЕРКА: chamber_number должен существовать
+    if (!cycle.chamber_number) {
+      console.error('[Telegram] ❌ У цикла отсутствует chamber_number!');
+      return;
     }
 
-    const timestamp = weighingRecord.timestamp || new Date().toISOString();
-
-    // ✅ нормализация weights
-    let weights = weighingRecord.weights || [];
-
-    if (typeof weights === 'string') {
-      try {
-        weights = JSON.parse(weights);
-      } catch {
-        weights = [];
-      }
-    }
-
-    weights = Array.isArray(weights) ? weights : [];
-
-    // ✅ ПРОВЕРКА НА ДУБЛИКАТ (последние 5 секунд)
-    const { data: existingRecord } = await supabase
+    // 2. ЧИТАЕМ ПОСЛЕДНЕЕ ВЗВЕШИВАНИЕ ИЗ БД
+    const { data: latestWeighings, error: latestError } = await supabase
       .from('weighing_records')
-      .select('id')
+      .select('*')
       .eq('cycle_id', cycleId)
-      .gte('timestamp', new Date(Date.now() - 5000).toISOString())
-      .maybeSingle();
+      .order('timestamp', { ascending: false })
+      .limit(1);
 
-    if (existingRecord) {
-      return c.json({
-        success: true,
-        message: 'Duplicate weighing detected',
-        duplicate: true
-      });
+    if (latestError || !latestWeighings || latestWeighings.length === 0) {
+      console.error('[Telegram] ❌ Взвешивание не найдено:', latestError);
+      return;
     }
 
-    // ✅ Telegram settings
-    const { data: settingsRow } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'telegram_settings')
-      .single();
-
-    const settings = settingsRow?.value || {};
-
-    // ✅ INSERT (🔥 главный блок)
-    const { data: insertData, error: insertError } = await supabase
-      .from('weighing_records')
-      .insert({
-        cycle_id: cycleId,
-        timestamp: timestamp,
-
-        weights: weights,
-
-        weight_limit: weighingRecord.weightLimit ?? null,
-        hours_from_start: weighingRecord.hoursFromStart ?? null,
-
-        recommendation: weighingRecord.recommendation ?? null,
-        recommendation_data: weighingRecord.recommendationData ?? null,
-
-        // 🔥 новые поля
-        end_time: weighingRecord.endTime ?? null,
-        current_time_value: weighingRecord.currentTime ?? null,
-        drying_hours: weighingRecord.dryingHours ?? null,
-        hours_needed: weighingRecord.hoursNeeded ?? null,
-        avg_overweight: weighingRecord.avgOverweight ?? null,
-        approved: weighingRecord.approved ?? null,
-        warmup_time: weighingRecord.warmupTime ?? null
-      })
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error('[INSERT ERROR]', insertError);
-      return c.json({ error: insertError.message }, 500);
+    const savedRecord = latestWeighings[0];
+    
+    console.log('[Telegram] ✅ Используем взвешивание из БД:', savedRecord.id);
+    
+    // 3. ПАРСИМ JSON поля из БД
+    let weights = [];
+    let recommendationData = null;
+    
+    try {
+      weights = typeof savedRecord.weights === 'string' 
+        ? JSON.parse(savedRecord.weights) 
+        : (savedRecord.weights || []);
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга weights:', e);
+      weights = [];
     }
-
-    // ✅ если Telegram выключен
-    if (!settings?.enabled || !settings?.botToken || !settings?.chatId) {
-      return c.json({
-        success: true,
-        message: 'Weighing saved (Telegram disabled)'
-      });
+    
+    try {
+      recommendationData = typeof savedRecord.recommendation_data === 'string'
+        ? JSON.parse(savedRecord.recommendation_data)
+        : savedRecord.recommendation_data;
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга recommendation_data:', e);
+      recommendationData = null;
     }
+    
+    const hoursFromStart = savedRecord.hours_from_start;
+    const weightLimit = savedRecord.weight_limit || 0;
 
-    // ✅ цикл
-    let cycle;
-
-    if (cycleData) {
-      cycle = {
-        chamber_number: cycleData.chamberNumber,
-        sequential_number: cycleData.sequentialNumber,
-        wood_type_lt: cycleData.woodType
-      };
-    } else {
-      const { data } = await supabase
-        .from('cycles')
-        .select('*')
-        .eq('id', cycleId)
-        .single();
-
-      if (!data) {
-        return c.json({ error: 'Cycle not found' }, 404);
-      }
-
-      cycle = data;
-    }
-
-    // ✅ предыдущее взвешивание
+    // 4. Предыдущее взвешивание
     const { data: previousWeighings } = await supabase
       .from('weighing_records')
       .select('*')
       .eq('cycle_id', cycleId)
-      .lt('timestamp', timestamp)
+      .lt('timestamp', savedRecord.timestamp)
       .order('timestamp', { ascending: false })
       .limit(1);
 
-    const previous = previousWeighings?.[0];
+    const previousWeighing = previousWeighings?.[0];
 
-    // ✅ функции
-    const getClosest3 = (arr: number[]) => {
-      if (arr.length <= 3) return arr;
+    // 5. Время
+    const lithuanianTime = new Date(savedRecord.timestamp).toLocaleString('lt-LT', {
+      timeZone: 'Europe/Vilnius',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
 
-      const sorted = [...arr].sort((a, b) => a - b);
+    // 6. 3 ближайших ящика
+    const getClosest3Boxes = (boxes: number[]) => {
+      if (boxes.length <= 3) return boxes;
 
-      let best = sorted.slice(0, 3);
+      const sorted = [...boxes].sort((a, b) => a - b);
+
       let minDiff = Infinity;
+      let bestStart = 0;
 
       for (let i = 0; i <= sorted.length - 3; i++) {
         const diff = sorted[i + 2] - sorted[i];
         if (diff < minDiff) {
           minDiff = diff;
-          best = sorted.slice(i, i + 3);
+          bestStart = i;
         }
       }
 
-      return best;
+      return [sorted[bestStart], sorted[bestStart + 1], sorted[bestStart + 2]];
     };
 
-    // ✅ время
-    const lithuanianTime = new Date(timestamp).toLocaleString('lt-LT', {
+    // 7. Средний вес
+    const closest3Current = getClosest3Boxes(weights);
+    const averageWeight = (
+      closest3Current.reduce((sum, w) => sum + w, 0) / 3
+    ).toFixed(2);
+
+    // 8. Список коробок
+    const boxList = weights
+      .map((w: number) => {
+        const emoji = w <= weightLimit ? '✅' : '❌';
+        return `📦 ${w}t ${emoji}`;
+      })
+      .join('\n');
+
+    // 9. Рекомендация
+    let recommendationText = '';
+
+    if (recommendationData) {
+      if (recommendationData.type === 'approved') {
+        recommendationText = '\n\n✅ GATAVA RINKTI!';
+      } else {
+        recommendationText =
+          `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
+      }
+    }
+
+    // 10. Изменение веса
+    let changeInfo = '';
+
+    if (previousWeighing) {
+      let prevWeights = [];
+      try {
+        prevWeights = typeof previousWeighing.weights === 'string'
+          ? JSON.parse(previousWeighing.weights)
+          : (previousWeighing.weights || []);
+      } catch (e) {
+        console.error('[Telegram] Ошибка парсинга prevWeights:', e);
+      }
+
+      const timeDiff =
+        (new Date(savedRecord.timestamp).getTime() -
+          new Date(previousWeighing.timestamp).getTime()) /
+        (1000 * 60 * 60);
+
+      const closest3Prev = getClosest3Boxes(prevWeights);
+
+      const prevAvg =
+        closest3Prev.reduce((sum: number, w: number) => sum + w, 0) / 3;
+
+      const currAvg = parseFloat(averageWeight);
+
+      const weightLoss = prevAvg - currAvg;
+      const lossRate = timeDiff > 0 ? weightLoss / timeDiff : 0;
+
+      if (weightLoss > 0) {
+        changeInfo =
+          `\n\n📉 ${prevAvg.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)` +
+          `\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+      }
+    }
+
+    // 11. Сообщение
+    const message = `<b>📦 Sušilė ${cycle.chamber_number}</b>
+
+📅 ${lithuanianTime}
+⏱ ${hoursFromStart}val nuo pradžios
+🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
+🎯 Tikslas: ${weightLimit}t/dėžė
+
+<b>Rezultatas:</b>
+${boxList}${changeInfo}${recommendationText}`.trim();
+
+    // 12. Telegram send
+    const response = await fetch(
+      `https://api.telegram.org/bot${telegramSettings.botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: telegramSettings.chatId,
+          text: message,
+          parse_mode: 'HTML'
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Telegram] ❌ Ошибка:', errorData);
+      throw new Error('Telegram API error');
+    }
+
+    const result = await response.json();
+    console.log('[Telegram] ✅ Сообщение отправлено! Message ID:', result.result?.message_id);
+
+  } catch (error: any) {
+    console.error('[Telegram] ❌ Ошибка отправки:', error.message);
+    throw error;
+  }
+}
+
+// Отправить информацию о взвешивании в Telegram 
+routes.post('/send-telegram-weighing', async (c) => {
+  try {
+    const { cycleId, weighingRecord } = await c.req.json();
+
+    if (!cycleId || !weighingRecord) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+
+    console.log('[Telegram] Отправка взвешивания:', cycleId);
+
+    // ✅ 1. Telegram settings
+    const { data: settingsRow, error: settingsError } = await supabase
+      .from('settings')
+      .select('value')
+      .eq('key', 'telegram_settings')
+      .single();
+
+    if (settingsError || !settingsRow?.value) {
+      return c.json({ error: 'Telegram settings not found' }, 404);
+    }
+
+    const settings = settingsRow.value;
+
+    if (!settings.enabled || !settings.botToken || !settings.chatId) {
+      return c.json({ error: 'Telegram not configured' }, 400);
+    }
+
+    // ✅ 2. Cycle
+    const { data: cycle, error: cycleError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('id', cycleId)
+      .single();
+
+    if (cycleError || !cycle) {
+      return c.json({ error: 'Цикл не найден' }, 404);
+    }
+
+    // ✅ 3. ЧИТАЕМ ПОСЛЕДНЕЕ ВЗВЕШИВАНИЕ ИЗ БД (НЕ ВСТАВЛЯЕМ!)
+    const { data: latestWeighings, error: latestError } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    if (latestError || !latestWeighings || latestWeighings.length === 0) {
+      console.error('[Telegram] Взвешивание не найдено:', latestError);
+      return c.json({ error: 'Взвешивание не найдено в базе данных' }, 404);
+    }
+
+    const savedRecord = latestWeighings[0];
+    
+    console.log('[Telegram] Используем взвешивание из БД:', savedRecord.id);
+    
+    // 🔥 ПАРСИМ JSON поля из БД
+    let weights = [];
+    let recommendationData = null;
+    
+    try {
+      weights = typeof savedRecord.weights === 'string' 
+        ? JSON.parse(savedRecord.weights) 
+        : (savedRecord.weights || []);
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга weights:', e);
+      weights = [];
+    }
+    
+    try {
+      recommendationData = typeof savedRecord.recommendation_data === 'string'
+        ? JSON.parse(savedRecord.recommendation_data)
+        : savedRecord.recommendation_data;
+    } catch (e) {
+      console.error('[Telegram] Ошибка парсинга recommendation_data:', e);
+      recommendationData = null;
+    }
+    
+    const hoursFromStart = savedRecord.hours_from_start;
+    const weightLimit = savedRecord.weight_limit || 0;
+
+    // ✅ 4. Предыдущее взвешивание (SQL вместо weighingHistory)
+    const { data: previousWeighings } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', cycleId)
+      .lt('timestamp', savedRecord.timestamp)
+      .order('timestamp', { ascending: false })
+      .limit(1);
+
+    const previousWeighing = previousWeighings?.[0];
+
+    // ✅ 5. Время
+    const lithuanianTime = new Date(savedRecord.timestamp).toLocaleString('lt-LT', {
       timeZone: 'Europe/Vilnius',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
       hour12: false
     });
 
-    // ✅ расчёты
-    const closest3 = getClosest3(weights);
-    const avg = closest3.length
-      ? (closest3.reduce((s, w) => s + Number(w), 0) / closest3.length).toFixed(2)
-      : '0.00';
+    // ✅ 6. 3 ближайших ящика
+    const getClosest3Boxes = (boxes: number[]) => {
+      if (boxes.length <= 3) return boxes;
 
-    const weightLimit = weighingRecord.weightLimit || 0;
+      const sorted = [...boxes].sort((a, b) => a - b);
 
+      let minDiff = Infinity;
+      let bestStart = 0;
+
+      for (let i = 0; i <= sorted.length - 3; i++) {
+        const diff = sorted[i + 2] - sorted[i];
+        if (diff < minDiff) {
+          minDiff = diff;
+          bestStart = i;
+        }
+      }
+
+      return [sorted[bestStart], sorted[bestStart + 1], sorted[bestStart + 2]];
+    };
+
+    // ✅ 7. Средний вес
+    const closest3Current = getClosest3Boxes(weights);
+    const averageWeight = (
+      closest3Current.reduce((sum, w) => sum + w, 0) / 3
+    ).toFixed(2);
+
+    // ✅ 8. Список коробок
     const boxList = weights
-      .map((w: number) => `📦 ${w}t ${w <= weightLimit ? '✅' : '❌'}`)
+      .map((w: number) => {
+        const emoji = w <= weightLimit ? '✅' : '❌';
+        return `📦 ${w}t ${emoji}`;
+      })
       .join('\n');
 
-    // ✅ изменение
-    let changeInfo = '';
+    // ✅ 9. Рекомендация
+    let recommendationText = '';
 
-    if (previous?.weights) {
-      const prev = Array.isArray(previous.weights)
-        ? previous.weights
-        : [];
-
-      const prev3 = getClosest3(prev);
-
-      if (prev3.length && closest3.length) {
-        const prevAvg = prev3.reduce((s, w) => s + Number(w), 0) / prev3.length;
-        const currAvg = parseFloat(avg);
-
-        const diff = prevAvg - currAvg;
-
-        if (diff > 0) {
-          changeInfo = `\n\n📉 ${prevAvg.toFixed(2)} → ${avg} (-${diff.toFixed(2)})`;
-        }
+    if (recommendationData) {
+      if (recommendationData.type === 'approved') {
+        recommendationText = '\n\n✅ GATAVA RINKTI!';
+      } else {
+        recommendationText =
+          `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
       }
     }
 
-    // ✅ рекомендация
-    let recommendationText = '';
+    // ✅ 10. Изменение веса
+    let changeInfo = '';
 
-    if (weighingRecord.recommendationData) {
-      const r = weighingRecord.recommendationData;
+    if (previousWeighing) {
+      const prevWeights = previousWeighing.weights || [];
 
-      recommendationText = r.type === 'approved'
-        ? '\n\n✅ GATAVA RINKTI!'
-        : `\n\n⏳ +${r.hoursNeeded}val (iki ${r.endTime})`;
+      const timeDiff =
+        (new Date(weighingRecord.timestamp).getTime() -
+          new Date(previousWeighing.timestamp).getTime()) /
+        (1000 * 60 * 60);
+
+      const closest3Prev = getClosest3Boxes(prevWeights);
+
+      const prevAvg =
+        closest3Prev.reduce((sum: number, w: number) => sum + w, 0) / 3;
+
+      const currAvg = parseFloat(averageWeight);
+
+      const weightLoss = prevAvg - currAvg;
+      const lossRate = timeDiff > 0 ? weightLoss / timeDiff : 0;
+
+      if (weightLoss > 0) {
+        changeInfo =
+          `\n\n📉 ${prevAvg.toFixed(2)}t → ${averageWeight}t (-${weightLoss.toFixed(2)}t per ${timeDiff.toFixed(1)}val)` +
+          `\n⚡️ Greitis: ${lossRate.toFixed(3)}t/val`;
+      }
     }
 
-    // ✅ сообщение
+    // ✅ 11. Сообщение
     const message = `<b>📦 ${cycle.chamber_number}</b>
 
 📅 ${lithuanianTime}
-⏱ ${weighingRecord.hoursFromStart || 0}h
+⏱ ${hoursFromStart}val nuo pradžios
 🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
-🎯 ${weightLimit}t
+🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
-${boxList}${changeInfo}${recommendationText}`;
+${boxList}${changeInfo}${recommendationText}`.trim();
 
-    // ✅ отправка
-    await fetch(`https://api.telegram.org/bot${settings.botToken}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: settings.chatId,
-        text: message,
-        parse_mode: 'HTML'
-      })
-    });
+    // ✅ 12. Telegram send
+    const response = await fetch(
+      `https://api.telegram.org/bot${settings.botToken}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: settings.chatId,
+          text: message,
+          parse_mode: 'HTML'
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Telegram] Ошибка:', errorData);
+      return c.json({ error: 'Ошибка отправки в Telegram', details: errorData }, 500);
+    }
+
+    const result = await response.json();
 
     return c.json({
       success: true,
-      id: insertData.id
+      messageId: result.result?.message_id
     });
 
   } catch (error: any) {
-    console.error('[Telegram ERROR]', error);
+    console.error('[Telegram] ERROR:', error);
     return c.json({ error: error.message }, 500);
   }
 });
