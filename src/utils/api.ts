@@ -248,7 +248,7 @@ export const api = {
   console.log("[API] RAW current work:", data);
 
   return data;
-}
+},
   
   // Telegram Settings
   getTelegramSettings: async () => {
