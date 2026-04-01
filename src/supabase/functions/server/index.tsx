@@ -322,31 +322,24 @@ routes.get('/cycles/active', async (c) => {
 
 routes.get('/cycles', async (c) => {
   try {
-    const limit = Number(c.req.query('limit') || 50);
-    const offset = Number(c.req.query('offset') || 0);
-
     const { data, error } = await supabase
       .from('cycles')
       .select('*')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+      .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('[SQL][GET /cycles] Ошибка:', error);
+      console.error('[SQL] Ошибка получения циклов:', error);
       return c.json({ error: error.message }, 500);
     }
 
-    const mapped = (data || []).map(fromDb);
+    // ✅ snake_case → camelCase
+    const mapped = data.map(fromDb);
 
-    return c.json({
-      data: mapped,
-      limit,
-      offset,
-      hasMore: (data || []).length === limit
-    });
+    // ✅ ПРОСТО возвращаем
+    return c.json(mapped);
 
   } catch (error: any) {
-    console.error('[Cycles][GET /cycles] ❌ Ошибка:', error);
+    console.error('[Cycles] ❌ Ошибка:', error);
     return c.json({ error: error.message }, 500);
   }
 });
@@ -365,62 +358,7 @@ routes.get('/cycles/:id', async (c) => {
       return c.json({ error: "Cycle not found" }, 404);
     }
 
-    // ✅ Преобразуем данные в frontend формат
-    const cycle = fromDb(data);
-
-    // ✅ Загружаем историю взвешиваний из weighing_records
-    const { data: weighingRecords } = await supabase
-      .from('weighing_records')
-      .select('*')
-      .eq('cycle_id', id)
-      .order('timestamp', { ascending: true });
-
-    // Преобразуем weighing_records в формат weighingHistory с ПАРСИНГОМ JSON
-    if (weighingRecords && weighingRecords.length > 0) {
-      cycle.weighingHistory = weighingRecords.map((record: any) => {
-        // 🔥 ПАРСИМ JSON поля из БД (PostgreSQL JSONB возвращается как строки)
-        let weights = [];
-        let recommendationData = null;
-        
-        try {
-          weights = typeof record.weights === 'string' 
-            ? JSON.parse(record.weights) 
-            : (record.weights || []);
-        } catch (e) {
-          console.error('[Cycle] Ошибка парсинга weights:', e);
-          weights = [];
-        }
-        
-        try {
-          recommendationData = typeof record.recommendation_data === 'string'
-            ? JSON.parse(record.recommendation_data)
-            : record.recommendation_data;
-        } catch (e) {
-          console.error('[Cycle] Ошибка парсинга recommendation_data:', e);
-          recommendationData = null;
-        }
-        
-        return {
-          id: record.id, // 🔥 ДОБАВИЛИ ID для удаления!
-          timestamp: record.timestamp,
-          hoursFromStart: record.hours_from_start,
-          hoursSinceLastCheck: record.hours_since_last_check,
-          weights: weights,
-          totalWeight: record.total_weight,
-          weightLimit: record.weight_limit,
-          recommendation: record.recommendation,
-          recommendationData: recommendationData,
-          driverName: record.driver_name
-        };
-      });
-    } else {
-      cycle.weighingHistory = [];
-    }
-
-    // ✅ Подписываем URL фотографий
-    const signedCycle = await signCycleUrls(cycle);
-
-    return c.json(signedCycle);
+    return c.json(fromDb(data));
 
   } catch (error: any) {
     console.error("Error fetching cycle:", error);
