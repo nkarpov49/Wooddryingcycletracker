@@ -193,8 +193,8 @@ const toDb = (data: any) => ({
     ? JSON.stringify(data.recipePhotos) 
     : data.recipePhotos,
 
-
-  weighing_result: data.weighingResult,
+  // 🔥 УБРАНО: weighing_result теперь сохраняется ТОЛЬКО в weighing_records таблице
+  // weighing_result: data.weighingResult,
 
   overall_comment: data.overallComment,
   is_test: data.isTest,
@@ -245,7 +245,8 @@ const fromDb = (data: any) => {
 
     recipePhotos: parseJsonField(data.recipe_photos),
 
-    weighingResult: data.weighing_result,
+    // 🔥 УБРАНО: weighingResult больше не используется (используем weighing_records)
+    // weighingResult: data.weighing_result,
 
     overallComment: data.overall_comment,
     isTest: data.is_test,
