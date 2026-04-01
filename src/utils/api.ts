@@ -270,7 +270,7 @@ export const api = {
   },
   
   // Send weighing info to Telegram
-  sendWeighingToTelegram: async (cycleId: string, weighingRecord: WeighingRecord) => {
+ // sendWeighingToTelegram:  sendWeighingToTelegram: async (cycleId: string, weighingRecord: WeighingRecord) => {
     return fetchWithAuth(`${BASE_URL}/send-telegram-weighing`, {
       method: 'POST',
       body: JSON.stringify({ cycleId, weighingRecord }),
