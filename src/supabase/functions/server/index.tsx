@@ -170,72 +170,76 @@ routes.get('/work-cycles', async (c) => {
 // - Backend теперь готов к масштабированию
 // ✅ Преобразование frontend → SQL (camelCase → snake_case)
 const toDb = (data: any) => ({
-  // ❗ БЕЗ ...data
+  final_moisture: data.finalMoisture ?? null,
+  quality_rating: data.qualityRating ?? null,
 
-  final_moisture: data.finalMoisture,
-  quality_rating: data.qualityRating,
-  result_photos: data.resultPhotos,
-  start_temperature: data.loadingTemp,
-  avg_day_temp: data.avgDayTemp,
-  avg_night_temp: data.avgNightTemp,
+  // ✅ jsonb — напрямую, без stringify
+  result_photos: Array.isArray(data.resultPhotos) ? data.resultPhotos : [],
+  recipe_photos: Array.isArray(data.recipePhotos) ? data.recipePhotos : [],
+
+  start_temperature: data.loadingTemp ?? null,
+  avg_day_temp: data.avgDayTemp ?? null,
+  avg_night_temp: data.avgNightTemp ?? null,
 
   chamber_number: data.chamberNumber,
   sequential_number: data.sequentialNumber,
 
-  wood_type_lt: data.woodType || data.woodTypeLt, 
+  // ❗ один источник
+  wood_type_lt: data.woodType,
 
-  start_date: data.startDate,
-  end_date: data.endDate,
+  // ✅ нормализация дат
+  start_date: data.startDate ? new Date(data.startDate).toISOString() : null,
+  end_date: data.endDate ? new Date(data.endDate).toISOString() : null,
 
-  recipe_photos: data.recipePhotos,
+  overall_comment: data.overallComment ?? null,
+  is_test: Boolean(data.isTest),
 
+  avg_temp: data.avgTemp ?? null,
+  max_temp: data.maxTemp ?? null,
+  min_temp: data.minTemp ?? null,
 
-  weighing_result: data.weighingResult,
-
-  overall_comment: data.overallComment,
-  is_test: data.isTest,
-
-  avg_temp: data.avgTemp,
-  max_temp: data.maxTemp,
-  min_temp: data.minTemp,
-
-  weighed_at: data.weighedAt
+  weighed_at: data.weighedAt ? new Date(data.weighedAt).toISOString() : null
 });
+
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
-const fromDb = (data: any) => ({
-  id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
+const fromDb = (data: any) => {
+  const safeArray = (v: any) => Array.isArray(v) ? v : [];
 
-  createdAt: data.created_at,
-  loadingTemp: data.start_temperature,
-  avgDayTemp: data.avg_day_temp,
-  avgNightTemp: data.avg_night_temp,
+  return {
+    id: data.id,
 
-  finalMoisture: data.final_moisture,
-  qualityRating: data.quality_rating,
-  resultPhotos: data.result_photos,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
 
-  chamberNumber: data.chamber_number,
-  sequentialNumber: data.sequential_number,
+    loadingTemp: data.start_temperature,
+    avgDayTemp: data.avg_day_temp,
+    avgNightTemp: data.avg_night_temp,
 
+    finalMoisture: data.final_moisture,
+    qualityRating: data.quality_rating,
 
-  woodType: data.wood_type_lt,
+    // ✅ jsonb приходит уже как массив
+    resultPhotos: safeArray(data.result_photos),
+    recipePhotos: safeArray(data.recipe_photos),
 
-  startDate: data.start_date,
-  endDate: data.end_date,
+    chamberNumber: data.chamber_number,
+    sequentialNumber: data.sequential_number,
 
-  recipePhotos: data.recipe_photos,
+    woodType: data.wood_type_lt,
 
-  weighingResult: data.weighing_result,
+    startDate: data.start_date,
+    endDate: data.end_date,
 
-  overallComment: data.overall_comment,
-  isTest: data.is_test,
+    overallComment: data.overall_comment,
+    isTest: Boolean(data.is_test),
 
-  avgTemp: data.avg_temp,
-  maxTemp: data.max_temp,
-  minTemp: data.min_temp,
+    avgTemp: data.avg_temp ?? null,
+    maxTemp: data.max_temp ?? null,
+    minTemp: data.min_temp ?? null,
 
-  weighedAt: data.weighed_at
-});
+    weighedAt: data.weighed_at
+  };
+};
 
 
 routes.get('/cycles/active', async (c) => {
