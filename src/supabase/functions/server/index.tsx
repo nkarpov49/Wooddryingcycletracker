@@ -471,6 +471,32 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
       console.log('[Cycle PUT] 🔍 weightLimit:', weighing.weightLimit);
       console.log('[Cycle PUT] 🔍 hoursFromStart:', weighing.hoursFromStart);
       
+      // 🔥 НОВОЕ: Получаем weight_limit из wood_type_settings
+      let finalWeightLimit = weighing.weightLimit;
+      let finalHoursFromStart = weighing.hoursFromStart;
+      
+      // Если weightLimit не передан frontend - берём из wood_type_settings
+      if (!finalWeightLimit && existing.wood_type_lt) {
+        const { data: woodSettings } = await supabase
+          .from('wood_type_settings')
+          .select('weight_limit')
+          .eq('name', existing.wood_type_lt)
+          .single();
+        
+        if (woodSettings?.weight_limit) {
+          finalWeightLimit = parseFloat(woodSettings.weight_limit);
+          console.log('[Cycle PUT] ✅ weight_limit из БД:', finalWeightLimit);
+        }
+      }
+      
+      // Если hoursFromStart не передан - вычисляем на backend
+      if (!finalHoursFromStart && existing.start_date) {
+        const now = new Date(weighing.timestamp || new Date().toISOString());
+        const startDate = new Date(existing.start_date);
+        finalHoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
+        console.log('[Cycle PUT] ✅ hours_from_start вычислен:', finalHoursFromStart);
+      }
+      
       const { error: weighingError } = await supabase
         .from('weighing_records')
         .insert({
@@ -479,8 +505,8 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
           weights: Array.isArray(weighing.weights) 
             ? weighing.weights.map((w: any) => typeof w === 'object' ? w.weight : w)
             : [],
-          weight_limit: weighing.weightLimit,
-          hours_from_start: weighing.hoursFromStart,
+          weight_limit: finalWeightLimit,              // ✅ ИСПРАВЛЕНО
+          hours_from_start: finalHoursFromStart,       // ✅ ИСПРАВЛЕНО
           hours_since_last_check: weighing.hoursSinceLastCheck,
           total_weight: weighing.totalWeight,
           recommendation: weighing.recommendation,
@@ -1694,8 +1720,35 @@ async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
       recommendationData = null;
     }
     
-    const hoursFromStart = savedRecord.hours_from_start;
-    const weightLimit = savedRecord.weight_limit || 0;
+    // 🔥 НОВОЕ: Вычисляем hoursFromStart и weightLimit если они NULL
+    let hoursFromStart = savedRecord.hours_from_start;
+    let weightLimit = savedRecord.weight_limit;
+    
+    // Если hoursFromStart == NULL - вычисляем
+    if (!hoursFromStart && cycle.start_date) {
+      const now = new Date(savedRecord.timestamp);
+      const startDate = new Date(cycle.start_date);
+      hoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
+      console.log('[Telegram] ⚠️ hours_from_start был NULL, вычислили:', hoursFromStart);
+    }
+    
+    // Если weightLimit == NULL - берём из wood_type_settings
+    if (!weightLimit && cycle.wood_type_lt) {
+      const { data: woodSettings } = await supabase
+        .from('wood_type_settings')
+        .select('weight_limit')
+        .eq('name', cycle.wood_type_lt)
+        .single();
+      
+      if (woodSettings?.weight_limit) {
+        weightLimit = parseFloat(woodSettings.weight_limit);
+        console.log('[Telegram] ⚠️ weight_limit был NULL, взяли из БД:', weightLimit);
+      } else {
+        weightLimit = 0; // fallback
+      }
+    }
+    
+    if (!weightLimit) weightLimit = 0; // final fallback
 
     // 4. Предыдущее взвешивание
     const { data: previousWeighings } = await supabase
@@ -1755,13 +1808,22 @@ async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
 
     // 9. Рекомендация
     let recommendationText = '';
+    
+    // Добавляем информацию о перегрузе
+    if (savedRecord.avg_overweight && parseFloat(savedRecord.avg_overweight) > 0) {
+      recommendationText += `\n\n⚠️ Persvara: ${parseFloat(savedRecord.avg_overweight).toFixed(2)}t`;
+    }
 
     if (recommendationData) {
       if (recommendationData.type === 'approved') {
-        recommendationText = '\n\n✅ GATAVA RINKTI!';
+        recommendationText += '\n✅ GATAVA RINKTI!';
       } else {
-        recommendationText =
-          `\n\n⏳ Tęsti +${recommendationData.hoursNeeded}val (iki ${recommendationData.endTime})`;
+        if (savedRecord.hours_needed) {
+          recommendationText += `\n⏰ Rekomenduojama dosušiti: ${savedRecord.hours_needed}val`;
+        }
+        if (savedRecord.current_time_value && savedRecord.end_time) {
+          recommendationText += `\n🕐 ${savedRecord.current_time_value} → ${savedRecord.end_time}`;
+        }
       }
     }
 
@@ -1801,14 +1863,14 @@ async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
     }
 
     // 11. Сообщение
-    const message = `<b>📦 Sušilė ${cycle.chamber_number}</b>
+    const message = `📦 ${cycle.chamber_number}
 
 📅 ${lithuanianTime}
-⏱ ${hoursFromStart}val nuo pradžios
+⏱ ${hoursFromStart || '?'}val nuo pradžios
 🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
-🎯 Tikslas: ${weightLimit}t/dėžė
+🎯 Tikslas: ${weightLimit || 0}t/dėžė
 
-<b>Rezultatas:</b>
+Rezultatas:
 ${boxList}${changeInfo}${recommendationText}`.trim();
 
     // 12. Telegram send
