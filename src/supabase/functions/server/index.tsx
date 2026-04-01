@@ -107,49 +107,47 @@ routes.get('/work-cycles', async (c) => {
   try {
     console.log('[WorkCycles] 📥 SQL запрос рабочих циклов');
 
-    // 🔹 1. Получаем циклы из SQL
     const { data, error } = await supabase
-  .from('cycles')
-  .select('*')
-  .is('end_date', null) // ✅ только незавершенные
-  .order('created_at', { ascending: false });
+      .from('cycles')
+      .select(`
+        id,
+        status,
+        chamber_number,
+        sequential_number,
+        wood_type_lt,
+        start_temperature,
+        created_at,
+        start_date,
+        end_date
+      `)
+      .is('end_date', null)
+      .order('created_at', { ascending: false })
+      .limit(50);
 
-    // 🔹 2. Обработка ошибки SQL
     if (error) {
       console.error('[WorkCycles] ❌ SQL ошибка:', error);
       return c.json([]);
     }
 
-    // 🔹 3. Если нет данных
     if (!data || data.length === 0) {
       console.log('[WorkCycles] ⚠️ Нет циклов в базе данных');
       return c.json([]);
     }
 
-    // 🔹 4. МАППИНГ SQL → формат фронта
-    // 👉 оставляем только нужные поля (без фото!)
     const cycles = data.map((row: any) => ({
-      id: row.id, // уникальный ID цикла
-      status: row.status, // статус (In Progress / Completed)
-
-      chamberNumber: row.chamber_number, // номер камеры
-      sequentialNumber: row.sequential_number, // номер цикла
+      id: row.id,
+      status: row.status,
+      chamberNumber: row.chamber_number,
+      sequentialNumber: row.sequential_number,
       woodType: row.wood_type_lt,
       loadingTemp: row.start_temperature,
-      createdAt: row.created_at, // дата создания
-      startDate: row.start_date, // дата начала
-      endDate: row.end_date, // дата окончания
+      createdAt: row.created_at,
+      startDate: row.start_date,
+      endDate: row.end_date,
     }));
-    
-
-    // 🔹 5. Сортировка (новые сверху)
-    cycles.sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
 
     console.log(`[WorkCycles] ✅ Возвращаем ${cycles.length} циклов`);
 
-    // 🔹 6. Возвращаем результат
     return c.json(cycles);
 
   } catch (error: any) {
@@ -161,7 +159,6 @@ routes.get('/work-cycles', async (c) => {
     );
   }
 });
-
 
 // ✅✅✅✅✅✅✅ KV → SQL migration completed
 // - Добавлен mapper (camelCase ↔ snake_case)
