@@ -244,41 +244,12 @@ const fromDb = (data: any) => {
   };
 };
 
-routes.get('/cycles/active', async (c) => {
-  const { data, error } = await supabase
-    .from('cycles')
-    .select(`
-      id,
-      chamber_number,
-      sequential_number,
-      wood_type_lt,
-      start_date,
-      end_date,
-      status,
-      created_at,
-      avg_temp,
-      max_temp,
-      min_temp,
-      start_temperature,
-      avg_day_temp,
-      avg_night_temp,
-      recipe_photos,
-      result_photos,
-      final_moisture,
-      quality_rating,
-      weighed_at,
-      overall_comment,
-      is_test
-    `)
-    .is('end_date', null) // 🔥 ИСТИНА, а не status
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('[GET /cycles/active] SQL error:', error);
-    return c.json({ error: error.message }, 500);
-  }
-
-  return c.json(data.map(fromDb)); // ✅ обязательно
+routes.get('/cycles/active', async (c) => { 
+  const { data, error } = await supabase 
+  .from('cycles') 
+  .select('*') 
+  .eq('status', 'In Progress'); // 🔥 ВОТ ЭТО 
+  return c.json(data); 
 });
 
 routes.get('/cycles', async (c) => {
