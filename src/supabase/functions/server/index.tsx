@@ -29,6 +29,10 @@ const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const BUCKET_NAME = "make-c5bcdb1f-drying-chamber-photos";
+
+// 🔥 КЕШ для предотвращения дублирующих Telegram сообщений
+const telegramSentCache = new Map<string, number>(); // cycleId + timestamp -> time sent
+const CACHE_TTL = 60000; // 60 секунд
 // ✅✅✅✅✅
 // Helpers
 async function ensureBucket() {
@@ -464,6 +468,8 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
       const weighing = body.weighingResult;
       
       console.log('[Cycle PUT] Сохраняем взвешивание:', weighing);
+      console.log('[Cycle PUT] 🔍 weightLimit:', weighing.weightLimit);
+      console.log('[Cycle PUT] 🔍 hoursFromStart:', weighing.hoursFromStart);
       
       const { error: weighingError } = await supabase
         .from('weighing_records')
@@ -508,12 +514,31 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
           
           // Проверяем что Telegram настроен и включён
           if (settingsRow?.value?.enabled && settingsRow.value.botToken && settingsRow.value.chatId) {
-            console.log('[Cycle PUT] 📤 Отправляем в Telegram...');
+            // 🔥 ЗАЩИТА ОТ ДУБЛЕЙ: проверяем кеш
+            const cacheKey = `${id}_${weighing.timestamp}`;
+            const lastSent = telegramSentCache.get(cacheKey);
+            const now = Date.now();
             
-            // Вызываем внутреннюю функцию отправки
-            await sendWeighingToTelegram(id, settingsRow.value);
-            
-            console.log('[Cycle PUT] ✅ Telegram отправлен успешно');
+            if (lastSent && (now - lastSent) < CACHE_TTL) {
+              console.log(`[Cycle PUT] ⏭️ Пропускаем отправку в Telegram (дубль, кеш: ${Math.round((now - lastSent) / 1000)}с назад)`);
+            } else {
+              console.log('[Cycle PUT] 📤 Отправляем в Telegram...');
+              
+              // Вызываем внутреннюю функцию отправки
+              await sendWeighingToTelegram(id, settingsRow.value);
+              
+              // Сохраняем в кеш
+              telegramSentCache.set(cacheKey, now);
+              
+              // Очищаем старые записи из кеша (старше 5 минут)
+              for (const [key, time] of telegramSentCache.entries()) {
+                if (now - time > 300000) {
+                  telegramSentCache.delete(key);
+                }
+              }
+              
+              console.log('[Cycle PUT] ✅ Telegram отправлен успешно');
+            }
           } else {
             console.log('[Cycle PUT] ℹ️ Telegram не настроен или выключен, пропускаем отправку');
           }
@@ -1609,7 +1634,8 @@ routes.post('/telegram-settings', async (c) => {
 // 🔥 HELPER: Отправка взвешивания в Telegram (вынесена в отдельную функцию)
 async function sendWeighingToTelegram(cycleId: string, telegramSettings: any) {
   try {
-    console.log('[Telegram] 📤 Начало отправки для цикла:', cycleId);
+    const callId = Math.random().toString(36).substring(7);
+    console.log(`[Telegram:${callId}] 📤 Начало отправки для цикла:`, cycleId);
     
     // 1. Получаем цикл
     const { data: cycle, error: cycleError } = await supabase
@@ -1806,7 +1832,7 @@ ${boxList}${changeInfo}${recommendationText}`.trim();
     }
 
     const result = await response.json();
-    console.log('[Telegram] ✅ Сообщение отправлено! Message ID:', result.result?.message_id);
+    console.log(`[Telegram:${callId}] ✅ Сообщение отправлено! Message ID:`, result.result?.message_id);
 
   } catch (error: any) {
     console.error('[Telegram] ❌ Ошибка отправки:', error.message);
