@@ -86,45 +86,21 @@ export default function CycleList() {
   }, []);
 
   async function loadCycles(silent = false) {
-  try {
-    const data = await api.getCycles();
-
-    // 🔥 ГЛАВНАЯ ЗАЩИТА — проверяем что это массив
-    if (!Array.isArray(data)) {
-      console.error("❌ API returned NOT array:", data);
-
-      // не ломаем UI
-      setCycles([]);
-
-      // можно показать ошибку (но не при авто-обновлении)
-      if (!silent) {
-        toast.error(t('error'));
-      }
-
-      return;
-    }
-
-    // ✅ нормальное обновление
-    setCycles(prevCycles => {
-      const hasChanged =
-        JSON.stringify(data) !== JSON.stringify(prevCycles);
-
-      return hasChanged ? data : prevCycles;
-    });
-
-  } catch (err) {
-    console.error("❌ loadCycles error:", err);
-
-    // 🔥 тоже защита
-    setCycles([]);
-
-    if (!silent) {
+    try {
+      const data = await api.getCycles();
+      
+      // Only update if data changed
+      setCycles(prevCycles => {
+        const hasChanged = JSON.stringify(data) !== JSON.stringify(prevCycles);
+        return hasChanged ? data : prevCycles;
+      });
+    } catch (err) {
+      console.error(err);
       toast.error(t('error'));
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
   }
-}
 
   // Restore Scroll Position ONLY if coming back (POP navigation)
   useEffect(() => {
