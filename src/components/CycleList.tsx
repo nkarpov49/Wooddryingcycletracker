@@ -77,13 +77,6 @@ export default function CycleList() {
   useEffect(() => {
     loadCycles();
     
-    // Auto-refresh every 10 seconds
-    const interval = setInterval(() => {
-      loadCycles(true); // Pass true to skip toast on auto-refresh
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, []);
 
   async function loadCycles(loadMore = false) {
   try {
@@ -724,6 +717,23 @@ export default function CycleList() {
         )}
       </div>
       )}
+
+      {hasMore && (
+  <div className="flex justify-center mt-6">
+    <button
+      onClick={() => loadCycles(true)}
+      className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700"
+    >
+      Ещё
+    </button>
+  </div>
+)}
+
+{!hasMore && (
+  <div className="text-center mt-4 text-gray-400">
+    Больше нет циклов
+  </div>
+)}
 
       {/* FAB */}
       <Link 
