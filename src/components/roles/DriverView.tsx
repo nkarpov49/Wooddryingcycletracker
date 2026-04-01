@@ -379,7 +379,16 @@ const loadWoodSettings = async () => {
         totalWeight: parseFloat(totalWeight.toFixed(2)),
         recommendationData, // Сохраняем структурированные данные
         driverName: 'Водитель', // Можно добавить имя водителя из контекста
-        weightLimit: weightLimit // Сохраняем целевой вес для этого взвешивания
+        weightLimit: weightLimit, // Сохраняем целевой вес для этого взвешивания
+        
+        // 🔥 ДОБАВЛЕНО: Дополнительные данные из калькулятора
+        approved: result.approved,
+        dryingHours: result.dryingHours || null,
+        hoursNeeded: result.hoursNeeded || null,
+        avgOverweight: result.avgOverweight ? parseFloat(result.avgOverweight) : null,
+        warmupTime: result.warmupTime || null,
+        endTime: result.endTime || null,
+        currentTime: result.currentTime || null
       };
       
       // Обновляем историю
