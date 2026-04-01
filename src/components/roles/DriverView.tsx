@@ -28,7 +28,7 @@ type WoodTypeConfig = {
   dryingRateTime: number;
 };
 
-// ✅ упрощённая и надёжная функция
+// ✅ упрощённая и надёжная функция нормализации
 const normalize = (str: string) =>
   str
     .toLowerCase()
@@ -39,13 +39,27 @@ const getWoodConfig = (
   woodType: string,
   configs: WoodTypeConfig[]
 ): WoodTypeConfig | undefined => {
-  if (!woodType || !configs.length) return undefined;
+  if (!woodType || !configs.length) {
+    console.log('[WoodConfig] ⚠️ Пустой woodType или configs');
+    return undefined;
+  }
 
   const normalizedType = normalize(woodType);
+  
+  console.log('[WoodConfig] 🔍 Ищем:', woodType, '→', normalizedType);
+  console.log('[WoodConfig] 📋 Доступные:', configs.map(c => normalize(c.name)));
 
-  return configs.find(c =>
+  const found = configs.find(c =>
     normalize(c.name) === normalizedType
   );
+  
+  if (found) {
+    console.log('[WoodConfig] ✅ Найдено:', found);
+  } else {
+    console.log('[WoodConfig] ❌ НЕ найдено для:', woodType);
+  }
+  
+  return found;
 };
 
 export default function DriverView() {
@@ -273,6 +287,12 @@ const loadWoodSettings = async () => {
     const warmupTime = config?.warmupTime || 2;
     const dryingRateTime = config?.dryingRateTime || 4;
     
+    console.log('[CalculateResult] 🎯 Selected Chamber:', selectedChamber.woodType);
+    console.log('[CalculateResult] 📊 Config:', config);
+    console.log('[CalculateResult] ⚖️ Weight Limit:', weightLimit);
+    console.log('[CalculateResult] 🔥 Warmup Time:', warmupTime);
+    console.log('[CalculateResult] 💧 Drying Rate Time:', dryingRateTime);
+    
     const validWeights = weights.filter(w => w.weight !== null && w.weight > 0);
     
     if (validWeights.length < 3) {
@@ -325,6 +345,12 @@ const loadWoodSettings = async () => {
     setIsSubmitting(true);
     
     try {
+      // 🔥 ГАРАНТИРУЕМ что настройки загружены
+      if (woodConfigs.length === 0) {
+        console.log('[Weighing] ⚠️ Настройки пород не загружены, загружаем...');
+        await loadWoodSettings();
+      }
+      
       // Получаем текущий цикл с полными данными
       const cycleResponse = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
@@ -375,6 +401,11 @@ const loadWoodSettings = async () => {
       // Получаем текущий weightLimit из конфига
       const config = getWoodConfig(selectedChamber.woodType, woodConfigs);
       const weightLimit = config?.weightLimit || 12.0;
+      
+      console.log('[Weighing] 🔍 Wood Type:', selectedChamber.woodType);
+      console.log('[Weighing] 🔍 Config найден:', config);
+      console.log('[Weighing] 🔍 Weight Limit:', weightLimit);
+      console.log('[Weighing] 🔍 Hours From Start:', hoursFromStart);
       
       // Создаем новую запись взвешивания
       const newWeighingRecord = {
