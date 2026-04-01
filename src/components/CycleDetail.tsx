@@ -102,10 +102,18 @@ export default function CycleDetail() {
       return;
     }
     
-    console.log(`[CycleDetail] Удаляем запись:`, new Date(record.timestamp).toISOString());
+    // 🔥 ИСПРАВЛЕНО: проверяем наличие ID взвешивания
+    if (!record.id) {
+      console.error(`[CycleDetail] У записи отсутствует ID!`, record);
+      toast.error('Ошибка: у записи нет ID');
+      return;
+    }
+    
+    console.log(`[CycleDetail] Удаляем запись ID: ${record.id}, Timestamp:`, new Date(record.timestamp).toISOString());
     
     try {
-      const result = await api.deleteWeighingRecord(id, index);
+      // 🔥 ПЕРЕДАЁМ ID ВЗВЕШИВАНИЯ, А НЕ ИНДЕКС!
+      const result = await api.deleteWeighingRecord(id, record.id);
       console.log(`[CycleDetail] ✅ Запись успешно удалена:`, result);
       toast.success(t('recordDeleted'));
       // Перезагружаем цикл для обновления данных
@@ -449,7 +457,7 @@ export default function CycleDetail() {
                                 </div>
                               </div>
                             );
-                          })}
+                          })} 
                         </div>
                       </div>
                       
@@ -480,7 +488,7 @@ export default function CycleDetail() {
                         </div>
                       ) : null}
                     </div>
-                  ))}
+                  ))} 
                 </div>
               </div>
             )}
@@ -502,7 +510,7 @@ export default function CycleDetail() {
                   {photo.caption && <span className="opacity-80 text-xs">{photo.caption}</span>}
                 </div>
               </div>
-            ))}
+            ))} 
           </div>
         </div>
       </div>
