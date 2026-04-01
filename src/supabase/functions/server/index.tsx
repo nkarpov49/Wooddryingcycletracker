@@ -1352,18 +1352,6 @@ routes.post('/wood-settings', async (c) => {
       return c.json({ error: 'Неверный формат данных' }, 400);
     }
 
-    // 1. Удаляем старые данные
-    const { error: deleteError } = await supabase
-      .from('wood_type_settings')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // удаляем всё
-
-    if (deleteError) {
-      console.error('[WoodSettings] Ошибка удаления:', deleteError);
-      return c.json({ error: deleteError.message }, 500);
-    }
-
-    // 2. Подготавливаем данные под SQL
     const formatted = body.map((item: any) => ({
       name: item.name,
       warmup_time: item.warmupTime,
@@ -1371,14 +1359,13 @@ routes.post('/wood-settings', async (c) => {
       drying_rate_time: item.dryingRateTime,
     }));
 
-    // 3. Вставляем новые
-    const { error: insertError } = await supabase
+    const { error } = await supabase
       .from('wood_type_settings')
-      .insert(formatted);
+      .upsert(formatted, { onConflict: 'name' });
 
-    if (insertError) {
-      console.error('[WoodSettings] Ошибка вставки:', insertError);
-      return c.json({ error: insertError.message }, 500);
+    if (error) {
+      console.error('[WoodSettings] Ошибка upsert:', error);
+      return c.json({ error: error.message }, 500);
     }
 
     console.log('[WoodSettings] Успешно сохранено:', formatted.length);
@@ -1388,7 +1375,6 @@ routes.post('/wood-settings', async (c) => {
     console.error('[WoodSettings] Ошибка сохранения:', error);
     return c.json({ error: error.message }, 500);
   }
-  console.log('🔥 POST /wood-settings CALLED');
 });
 
 // Проверка общего пароля приложения ✅ 
