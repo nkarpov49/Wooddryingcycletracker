@@ -207,44 +207,38 @@ const toDb = (data: any) => ({
 
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
-  // Helper для безопасного парсинга JSON
-  const parseJsonField = (field: any) => {
-  if (!field) return [];
-  return Array.isArray(field) ? field : [];
-};
+  const safeArray = (v: any) => Array.isArray(v) ? v : [];
 
   return {
-    id: data.id, // 🔥 ВОТ ЭТО ОБЯЗАТЕЛЬНО
+    id: data.id,
 
     createdAt: data.created_at,
+    updatedAt: data.updated_at,
+
     loadingTemp: data.start_temperature,
     avgDayTemp: data.avg_day_temp,
     avgNightTemp: data.avg_night_temp,
 
     finalMoisture: data.final_moisture,
     qualityRating: data.quality_rating,
-    resultPhotos: parseJsonField(data.result_photos),
+
+    resultPhotos: safeArray(data.result_photos),
+    recipePhotos: safeArray(data.recipe_photos),
 
     chamberNumber: data.chamber_number,
     sequentialNumber: data.sequential_number,
-
 
     woodType: data.wood_type_lt,
 
     startDate: data.start_date,
     endDate: data.end_date,
 
-    recipePhotos: parseJsonField(data.recipe_photos),
-
-    // 🔥 УБРАНО: weighingResult больше не используется (используем weighing_records)
-    // weighingResult: data.weighing_result,
-
     overallComment: data.overall_comment,
-    isTest: data.is_test,
+    isTest: Boolean(data.is_test),
 
-    avgTemp: data.avg_temp,
-    maxTemp: data.max_temp,
-    minTemp: data.min_temp,
+    avgTemp: data.avg_temp ?? null,
+    maxTemp: data.max_temp ?? null,
+    minTemp: data.min_temp ?? null,
 
     weighedAt: data.weighed_at
   };
