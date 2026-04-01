@@ -339,6 +339,12 @@ const loadWoodSettings = async () => {
       const startDate = new Date(currentCycle.startDate || currentCycle.createdAt);
       const hoursFromStart = Math.round((now.getTime() - startDate.getTime()) / (1000 * 60 * 60));
       
+      console.log('[Weighing] 🕐 Временные метки:', {
+        now: now.toISOString(),
+        startDate: startDate.toISOString(),
+        hoursFromStart
+      });
+      
       // Получаем предыдущую историю взвешиваний
       const previousHistory = currentCycle.weighingHistory || [];
       const lastWeighing = previousHistory[previousHistory.length - 1];
@@ -390,6 +396,8 @@ const loadWoodSettings = async () => {
         endTime: result.endTime || null,
         currentTime: result.currentTime || null
       };
+      
+      console.log('[Weighing] 📦 Отправляемый объект:', newWeighingRecord);
       
       // Обновляем историю
       const updatedHistory = [...previousHistory, newWeighingRecord];
