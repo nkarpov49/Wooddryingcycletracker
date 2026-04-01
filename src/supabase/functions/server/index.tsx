@@ -244,16 +244,6 @@ const fromDb = (data: any) => {
   };
 };
 
-
-routes.get('/cycles/active', async (c) => {
-  const { data, error } = await supabase
-  .from('cycles')
-  .select('*')
-  .eq('status', 'In Progress'); // 🔥 ВОТ ЭТО
-
-  return c.json(data);
-});
-
 routes.get('/cycles', async (c) => {
   try {
     const { data, error } = await supabase
