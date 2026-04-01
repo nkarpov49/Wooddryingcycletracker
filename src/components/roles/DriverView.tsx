@@ -436,20 +436,28 @@ const loadWoodSettings = async () => {
       // 1. Обновляем цикл и отправляем взвешивание
       console.log('[Weighing] 🚀 Отправка на backend...');
       
-      await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`
-          },
-          body: JSON.stringify({
-            // 🔥 ИСПРАВЛЕНО: Отправляем полную структуру взвешивания
-            weighingResult: newWeighingRecord
-          })
-        }
-      );
+      const response = await fetch(
+  `https://${projectId}.supabase.co/functions/v1/make-server-c5bcdb1f/cycles/${selectedChamber.id}`,
+  {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${publicAnonKey}`
+    },
+    body: JSON.stringify({
+      weighingResult: newWeighingRecord
+    })
+  }
+);
+
+// 🔥 ВАЖНО
+if (!response.ok) {
+  const errorText = await response.text();
+  console.error('[Weighing] ❌ Backend error:', errorText);
+  throw new Error(errorText);
+}
+
+console.log('[Weighing] ✅ Backend success');
 
       console.log('[Weighing] ✅ Backend ответил успешно');
       
