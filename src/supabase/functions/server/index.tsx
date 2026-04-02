@@ -126,20 +126,8 @@ routes.get('/work-cycles', async (c) => {
     }
 
     // 🔹 4. МАППИНГ SQL → формат фронта
-    // 👉 оставляем только нужные поля (без фото!)
-    const cycles = data.map((row: any) => ({
-      id: row.id, // уникальный ID цикла
-      status: row.status, // статус (In Progress / Completed)
-
-      chamberNumber: row.chamber_number, // номер камеры
-      sequentialNumber: row.sequential_number, // номер цикла
-      woodType: row.wood_type_lt,
-      loadingTemp: row.start_temperature,
-      createdAt: row.created_at, // дата создания
-      startDate: row.start_date, // дата начала
-      endDate: row.end_date, // дата окончания
-    }));
-
+    // Используем общую функцию fromDb, которая теперь корректно парсит JSON
+    const cycles = data.map(fromDb);
 
     // 🔹 5. Сортировка (новые сверху)
     cycles.sort((a, b) =>
@@ -204,18 +192,23 @@ const toDb = (data: any) => {
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
   const safeArray = (v: any) => {
-    // ❗ ИСПРАВЛЕНИЕ: База данных иногда возвращает "дважды упакованный" JSON (строка в строке)
-    // Разбираем строку, пока не получим массив или пока не перестанет парситься
+    // ❗ ИСПРАВЛЕНИЕ: База данных иногда возвращает JSON как дважды упакованную строку
+    // Разбираем строку рекурсивно, пока не получим массив или пока не перестанет парситься
     let result = v;
-    let attempts = 0;
-    while (typeof result === 'string' && attempts < 5) {
+    let iterations = 0;
+    while (typeof result === 'string' && iterations < 5) {
       try {
         const parsed = JSON.parse(result);
-        // Если результат парсинга НЕ строка и НЕ массив, это какая-то ошибка (например, число)
-        if (typeof parsed !== 'string' && !Array.isArray(parsed)) break;
-        result = parsed;
-        attempts++;
-      } catch {
+        // Если после парсинга всё ещё строка — продолжаем (двойная упаковка)
+        // Если массив — готово
+        if (typeof parsed === 'string' || Array.isArray(parsed)) {
+          result = parsed;
+        } else {
+          // Если получили объект/число/null — это не фото-массив
+          break;
+        }
+        iterations++;
+      } catch (e) {
         break;
       }
     }
