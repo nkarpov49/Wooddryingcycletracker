@@ -330,6 +330,35 @@ routes.get('/cycles/:id', async (c) => {
 
     const cycle = fromDb(data);
 
+    // 🔄 Подтягиваем историю взвешиваний из связанной таблицы
+    const { data: weighingData, error: weighingError } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', id)
+      .order('timestamp', { ascending: true });
+      
+    if (!weighingError && weighingData) {
+      // Преобразуем SQL snake_case поля в camelCase для старого фронтенда
+      cycle.weighingHistory = weighingData.map((w: any) => ({
+        id: w.id,
+        timestamp: w.timestamp,
+        weights: w.weights || [],
+        weightLimit: w.weight_limit,
+        hoursFromStart: w.hours_from_start,
+        recommendation: w.recommendation,
+        recommendationData: w.recommendation_data,
+        endTime: w.end_time,
+        currentTime: w.current_time_value,
+        dryingHours: w.drying_hours,
+        hoursNeeded: w.hours_needed,
+        avgOverweight: w.avg_overweight,
+        approved: w.approved,
+        warmupTime: w.warmup_time,
+      }));
+    } else {
+      cycle.weighingHistory = [];
+    }
+
     // 🔥 ВОЗВРАЩАЕМ ЭТО ОБРАТНО
     const signedCycle = await signCycleUrls(cycle);
 
@@ -408,8 +437,39 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
     mappedBody.end_date = now.toISOString();
   }
 }
+    // ✅ ИЗВЛЕЧЕНИЕ weighingResult ДЛЯ SQL
+    let weighed_at = existing.weighed_at;
+    if (body.weighingResult) {
+      const wr = body.weighingResult;
+      const { error: insertError } = await supabase
+        .from('weighing_records')
+        .insert([{
+          cycle_id: id,
+          timestamp: wr.timestamp || new Date().toISOString(),
+          weights: wr.weights || [],
+          weight_limit: wr.weightLimit || null,
+          hours_from_start: wr.hoursFromStart || null,
+          recommendation: null, // Legacy text
+          recommendation_data: wr.recommendationData || null,
+          end_time: wr.endTime || null,
+          current_time_value: wr.currentTime || null,
+          drying_hours: wr.dryingHours || null,
+          hours_needed: wr.hoursNeeded || null,
+          avg_overweight: wr.avgOverweight || null,
+          approved: wr.approved || false,
+          warmup_time: wr.warmupTime || null
+        }]);
+        
+      if (insertError) {
+        console.error('[SQL] Ошибка вставки взвешивания:', insertError);
+      } else {
+        console.log('[SQL] Взвешивание успешно сохранено');
+        weighed_at = wr.timestamp || new Date().toISOString();
+      }
+    }
+
     // 🧠 Объединяем (как раньше в KV)
-    const updated = { ...existing, ...mappedBody };
+    const updated = { ...existing, ...mappedBody, weighed_at };
 
     // ✅ ЛОГИКА СТАТУСА (исправлена под SQL)
     const hasFinalMoisture =
@@ -434,9 +494,10 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
     const { error: updateError } = await supabase
       .from('cycles')
       .update({
-  ...mappedBody,
-  status: updated.status
-})
+        ...mappedBody,
+        weighed_at: updated.weighed_at,
+        status: updated.status
+      })
       .eq('id', id);
 
     if (updateError) {
