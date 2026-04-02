@@ -287,7 +287,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                               key={wIdx}
                               className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-700"
                             >
-                              {w.toFixed(2)}т
+                              {w !== null && w !== undefined ? w.toFixed(2) : '—'}т
                             </div>
                           ))}
                         </div>
