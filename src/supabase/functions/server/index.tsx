@@ -1571,26 +1571,8 @@ routes.post('/send-telegram-weighing', async (c) => {
       return c.json({ error: 'Цикл не найден' }, 404);
     }
 
-    // ✅ 3. Сохраняем взвешивание
-const { data: insertData, error: insertError } = await supabase
-  .from('weighing_records')
-  .insert({
-    cycle_id: cycleId,
-    timestamp: weighingRecord.timestamp || new Date().toISOString(),
-    weights: weighingRecord.weights || [],
-    weight_limit: weighingRecord.weightLimit,
-    hours_from_start: weighingRecord.hoursFromStart,
-    recommendation: weighingRecord.recommendation,
-    recommendation_data: weighingRecord.recommendationData
-  })
-  .select();
-
-if (insertError) {
-  console.error('❌ INSERT ERROR:', insertError);
-  return c.json({ error: insertError.message }, 500);
-}
-
-console.log('✅ INSERT OK:', insertData);
+    // ✅ 3. Взвешивание УЖЕ сохранено в основном роуте PUT /cycles/:id
+    // Пропускаем дублирующий INSERT INTO weighing_records
 
     // ✅ 4. Предыдущее взвешивание (SQL вместо weighingHistory)
     const { data: previousWeighings } = await supabase
@@ -1693,11 +1675,11 @@ console.log('✅ INSERT OK:', insertData);
     }
 
     // ✅ 11. Сообщение
-    const message = `<b>📦 ${cycle.chamberNumber}</b>
+    const message = `<b>📦 ${cycle.chamber_number}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
-🌲 ${cycle.wood_type_lt} (#${cycle.sequentialNumber})
+🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
