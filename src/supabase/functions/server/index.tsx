@@ -183,12 +183,12 @@ const toDb = (data: any) => {
     final_moisture: data.finalMoisture,
     quality_rating: data.qualityRating,
     result_photos: cleanPhotos(data.resultPhotos),
-    start_temperature: data.loadingTemp,
+    start_temperature: data.startTemperature ?? data.loadingTemp, // Поддержка обоих вариантов
     avg_day_temp: data.avgDayTemp,
     avg_night_temp: data.avgNightTemp,
     chamber_number: data.chamberNumber,
     sequential_number: data.sequentialNumber,
-    wood_type_lt: data.woodTypeLt,
+    wood_type_lt: data.woodType ?? data.woodTypeLt, // Поддержка обоих вариантов
     start_date: data.startDate,
     end_date: data.endDate,
     recipe_photos: cleanPhotos(data.recipePhotos),
@@ -375,8 +375,10 @@ routes.post('/cycles', async (c) => {
       return c.json({ error: error.message }, 500);
     }
 
-    // 📤 Возвращаем обратно в camelCase
-    return c.json(fromDb(newCycle));
+    // 📤 Возвращаем обратно в camelCase с ПОДПИСАННЫМИ фото
+    const mapped = fromDb(newCycle);
+    const signed = await signCycleUrls(mapped);
+    return c.json(signed);
 
   } catch (error: any) {
     console.error("Error creating cycle:", error);
@@ -453,8 +455,10 @@ routes.put('/cycles/:id', async (c) => {
       return c.json({ error: updateError.message }, 500);
     }
 
-    // 📤 Возвращаем в frontend формате
-    return c.json(fromDb(updated));
+    // 📤 Возвращаем в frontend формате с ПОДПИСАННЫМИ фото
+    const mapped = fromDb(updated);
+    const signed = await signCycleUrls(mapped);
+    return c.json(signed);
 
   } catch (error: any) {
     console.error("Error updating cycle:", error);
