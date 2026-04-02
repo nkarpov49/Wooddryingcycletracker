@@ -207,7 +207,13 @@ const toDb = (data: any) => ({
 
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
-  const safeArray = (v: any) => Array.isArray(v) ? v : [];
+  const safeArray = (v: any) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') {
+      try { return JSON.parse(v); } catch { return []; }
+    }
+    return [];
+  };
 
   return {
     // ID и временные метки
@@ -247,7 +253,7 @@ const fromDb = (data: any) => {
 
     // Порода древесины
     woodType: data.wood_type_lt || data.wood_type || '',
-    
+
     // ✅ ДОБАВЛЕНО: customWoodType
     customWoodType: data.custom_wood_type || null,
 
@@ -260,10 +266,10 @@ const fromDb = (data: any) => {
 
     // Флаги
     isTest: Boolean(data.is_test),
-    
+
     // ✅ ДОБАВЛЕНО: isBaseRecipe
     isBaseRecipe: Boolean(data.is_base_recipe),
-    
+
     // ✅ ДОБАВЛЕНО: isFailed (для мокрых/неудачных циклов)
     isFailed: Boolean(data.is_failed),
 
@@ -279,7 +285,6 @@ const fromDb = (data: any) => {
     // Примечание: weighingHistory загружается отдельно в getCycle по ID
   };
 };
-
 
 routes.get('/cycles/active', async (c) => {
   const { data, error } = await supabase
