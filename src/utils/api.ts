@@ -171,7 +171,9 @@ export const api = {
   // Alias for getCycle for convenience
   getActiveCycles: () => fetchWithAuth(`${BASE_URL}/cycles/active`),
   getCycleById: async (id: string) => {
-    return fetchWithAuth(`${BASE_URL}/cycles/${id}`);
+    const data = await fetchWithAuth(`${BASE_URL}/cycles/${id}`);
+    console.log(`[API] 🚲 Данные цикла ${id}:`, data);
+    return data;
   },
   
   createCycle: async (cycle: DryingCycle) => {
