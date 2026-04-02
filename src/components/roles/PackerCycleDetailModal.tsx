@@ -19,7 +19,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
   const [currentPhotoType, setCurrentPhotoType] = useState<'recipe' | 'result'>('recipe');
-  
+
   // Состояние редактирования
   const [editedComment, setEditedComment] = useState(cycle.overallComment || '');
   const [editedResultPhotos, setEditedResultPhotos] = useState(cycle.resultPhotos || []);
@@ -35,8 +35,16 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const allRecipePhotos = cycle.recipePhotos || [];
-  const duration = cycle.startDate && cycle.endDate 
+  // Формируем список фото рецепта (массив или одиночное фото из старых полей)
+  let allRecipePhotos = cycle.recipePhotos || [];
+  if (allRecipePhotos.length === 0 && (cycle.recipePhotoUrl || cycle.recipePhotoPath)) {
+    allRecipePhotos = [{
+      url: cycle.recipePhotoUrl || '',
+      path: cycle.recipePhotoPath || '',
+      caption: t('recipePhoto')
+    }];
+  }
+  const duration = cycle.startDate && cycle.endDate
     ? differenceInHours(parseISO(cycle.endDate), parseISO(cycle.startDate))
     : null;
 
@@ -58,20 +66,20 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
 
   const handleSave = async () => {
     if (!cycle.id) return;
-    
+
     setSaving(true);
     try {
       const updatedCycle = await api.updateCycle(cycle.id, {
         overallComment: editedComment,
         resultPhotos: editedResultPhotos,
       });
-      
+
       toast.success(t('saved'));
-      
+
       if (onUpdate) {
         onUpdate({ ...cycle, ...updatedCycle });
       }
-      
+
       // Закрываем модальное окно после сохранения
       setTimeout(() => {
         onClose();
@@ -131,8 +139,8 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   };
 
   // Проверка есть ли изменения
-  const hasChanges = editedComment !== (cycle.overallComment || '') || 
-                     JSON.stringify(editedResultPhotos) !== JSON.stringify(cycle.resultPhotos || []);
+  const hasChanges = editedComment !== (cycle.overallComment || '') ||
+    JSON.stringify(editedResultPhotos) !== JSON.stringify(cycle.resultPhotos || []);
 
   // Lightbox
   if (lightboxOpen && currentPhotos.length > 0) {
@@ -140,9 +148,9 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
       url: p.url || '',
       caption: p.caption || (currentPhotoType === 'recipe' ? `${t('recipePhoto')} ${idx + 1}` : `${t('resultPhoto')} ${idx + 1}`)
     }));
-    
+
     return (
-      <PhotoZoomViewer 
+      <PhotoZoomViewer
         photos={photosForZoomViewer}
         initialIndex={currentPhotoIndex}
         onClose={() => setLightboxOpen(false)}
@@ -152,11 +160,11 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
 
   // Modal
   return (
-    <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-end sm:items-center justify-center animate-in fade-in duration-200" 
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-end sm:items-center justify-center animate-in fade-in duration-200"
       onClick={onClose}
     >
-      <div 
+      <div
         className="bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-300"
         onClick={(e) => e.stopPropagation()}
       >
@@ -173,7 +181,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                 </h2>
               )}
             </div>
-            <button 
+            <button
               onClick={onClose}
               className="p-2 -mt-1 -mr-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
             >
@@ -252,22 +260,21 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                   </span>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 {cycle.weighingHistory.map((record, idx) => {
                   const isLast = idx === cycle.weighingHistory!.length - 1;
-                  
+
                   return (
-                    <div 
-                      key={idx} 
+                    <div
+                      key={idx}
                       className={`bg-white rounded-xl p-3 border-2 ${isLast ? 'border-green-300' : 'border-orange-200'} shadow-sm`}
                     >
                       {/* Header with timestamp */}
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                            isLast ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'
-                          }`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${isLast ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'
+                            }`}>
                             {idx + 1}
                           </div>
                           <span className="text-xs text-gray-600">
@@ -278,12 +285,12 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                           {record.hoursFromStart}ч {lang === 'ru' ? 'от старта' : 'nuo starto'}
                         </div>
                       </div>
-                      
+
                       {/* Individual box weights */}
                       {record.weights && record.weights.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mb-2">
                           {record.weights.map((w, wIdx) => (
-                            <div 
+                            <div
                               key={wIdx}
                               className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-700"
                             >
@@ -292,16 +299,15 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                           ))}
                         </div>
                       )}
-                      
+
                       {/* Recommendation */}
                       {(record.recommendation || record.recommendationData) && (
-                        <div className={`mt-2 p-2 rounded-lg ${
-                          record.recommendationData?.type === 'approved' 
-                            ? 'bg-green-100 border border-green-200' 
+                        <div className={`mt-2 p-2 rounded-lg ${record.recommendationData?.type === 'approved'
+                            ? 'bg-green-100 border border-green-200'
                             : 'bg-blue-100 border border-blue-200'
-                        }`}>
+                          }`}>
                           <div className="text-xs font-bold text-gray-800">
-                            {record.recommendationData?.type === 'approved' 
+                            {record.recommendationData?.type === 'approved'
                               ? `✅ ${lang === 'ru' ? 'Одобрено' : 'Patvirtinta'}`
                               : `⏰ ${lang === 'ru' ? 'Продолжить' : 'Tęsti'}`
                             }
@@ -355,7 +361,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                 </div>
                 <h3 className="text-sm font-bold text-gray-900">{t('resultPhoto')}</h3>
               </div>
-              
+
               {/* Photo Grid */}
               {editedResultPhotos.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-3">
@@ -376,7 +382,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
                   ))}
                 </div>
               )}
-              
+
               {/* Add Photo Buttons */}
               <div className="grid grid-cols-2 gap-2">
                 <button
