@@ -291,7 +291,7 @@ routes.get('/cycles/active', async (c) => {
   const { data, error } = await supabase
     .from('cycles')
     .select('*')
-    .eq('status', 'In Progress');
+    .is('end_date', null); // ✅ только незавершенные (как в /work-cycles)
 
   if (error) return c.json({ error: error.message }, 500);
 
