@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO, differenceInHours } from 'date-fns';
@@ -25,6 +25,12 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
   const [editedResultPhotos, setEditedResultPhotos] = useState(cycle.resultPhotos || []);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  
+  // Синхронизация состояния при смене пропса cycle
+  useEffect(() => {
+    setEditedComment(cycle.overallComment || '');
+    setEditedResultPhotos(cycle.resultPhotos || []);
+  }, [cycle.id, cycle.overallComment, cycle.resultPhotos]);
 
   const getWoodStyle = (woodType: string) => {
     const type = (woodType || '').toLowerCase();
