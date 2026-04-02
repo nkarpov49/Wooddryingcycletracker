@@ -2,9 +2,8 @@
 // Обрабатывает события завершения циклов из Google Sheets
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import * as kv from "./kv_store.tsx";
-import { normalizeWoodType, convertLithuanianToEnglish } from "./wood-type-mapping.ts";
 import { format } from "npm:date-fns";
+import { normalizeWoodType, convertLithuanianToEnglish } from "./wood-type-mapping.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -246,12 +245,21 @@ async function completeOldCycle(row: GoogleSheetRow): Promise<SyncLog> {
   };
   
   try {
-    // Ищем цикл по sequentialNumber
-    const cycles = await kv.getByPrefix("cycle_");
-    const oldCycle = cycles.find((c: any) => 
-      c.sequentialNumber === row.oldSequentialNumber &&
-      c.chamberNumber === row.chamberNumber
-    );
+    // Ищем цикл по sequentialNumber и chamberNumber
+    const { data: cycles, error: findError } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('sequential_number', row.oldSequentialNumber)
+      .eq('chamber_number', row.chamberNumber)
+      .is('end_date', null) // ✅ завершаем только активный
+      .order('created_at', { ascending: false });
+
+    if (findError) {
+      log.message = `Ошибка поиска: ${findError.message}`;
+      return log;
+    }
+
+    const oldCycle = cycles?.[0];
     
     if (!oldCycle) {
       log.message = `Цикл с номером ${row.oldSequentialNumber} для камеры ${row.chamberNumber} не найден`;
@@ -290,7 +298,22 @@ async function completeOldCycle(row: GoogleSheetRow): Promise<SyncLog> {
       }
     }
     
-    await kv.set(`cycle_${oldCycle.id}`, updatedCycle);
+    const { error: updateError } = await supabase
+      .from('cycles')
+      .update({
+        status: 'Completed',
+        end_date: row.oldCycleEndDate,
+        avg_temp: updatedCycle.avgTemp,
+        min_temp: updatedCycle.minTemp,
+        max_temp: updatedCycle.maxTemp,
+        avg_day_temp: updatedCycle.avgDayTemp,
+        avg_night_temp: updatedCycle.avgNightTemp
+      })
+      .eq('id', oldCycle.id);
+
+    if (updateError) {
+      throw new Error(`SQL Update Error: ${updateError.message}`);
+    }
     
     const wasCompleted = oldCycle.status === 'Completed';
     log.success = true;
@@ -355,11 +378,14 @@ async function createNewCycle(chamberNumber: number, sequentialNumber: string, w
     console.log(`[GoogleSheets] ✅ Конвертация породы: ${woodTypeLithuanian} → ${woodTypeEnglish}`);
     
     // Проверяем, существует ли уже цикл с таким sequentialNumber
-    const cycles = await kv.getByPrefix("cycle_");
-    const existingCycle = cycles.find((c: any) => 
-      c.sequentialNumber === sequentialNumber &&
-      c.chamberNumber === chamberNumber
-    );
+    const { data: existingCycles } = await supabase
+      .from('cycles')
+      .select('*')
+      .eq('sequential_number', sequentialNumber)
+      .eq('chamber_number', chamberNumber)
+      .limit(1);
+
+    const existingCycle = existingCycles?.[0];
     
     // Получаем данные о погоде
     const weatherData = await fetchStartWeather(startDate);
@@ -382,7 +408,18 @@ async function createNewCycle(chamberNumber: number, sequentialNumber: string, w
         updatedCycle.startWeatherCode = weatherData.startWeatherCode;
       }
       
-      await kv.set(`cycle_${existingCycle.id}`, updatedCycle);
+      const { error: updateError } = await supabase
+        .from('cycles')
+        .update({
+          wood_type_lt: woodTypeLithuanian,
+          wood_type: woodTypeEnglish,
+          start_date: startDate,
+          start_temperature: weatherData.startTemperature,
+          start_weather_code: weatherData.startWeatherCode
+        })
+        .eq('id', existingCycle.id);
+
+      if (updateError) throw updateError;
       
       log.success = true;
       log.message = `Цикл ${sequentialNumber} ОБНОВЛЁН. Порода: ${woodTypeEnglish}, Дата: ${startDate}`;
@@ -423,7 +460,22 @@ async function createNewCycle(chamberNumber: number, sequentialNumber: string, w
       }
       
       // Сохраняем новый цикл
-      await kv.set(`cycle_${newId}`, newCycle);
+      const { error: insertError } = await supabase
+        .from('cycles')
+        .insert({
+          id: newId,
+          chamber_number: chamberNumber,
+          sequential_number: sequentialNumber,
+          wood_type: woodTypeEnglish,
+          wood_type_lt: woodTypeLithuanian,
+          status: 'In Progress',
+          created_at: startDate,
+          start_date: startDate,
+          start_temperature: weatherData.startTemperature || null,
+          start_weather_code: weatherData.startWeatherCode || null
+        });
+
+      if (insertError) throw insertError;
       
       log.success = true;
       log.message = `Новый цикл ${sequentialNumber} создан для камеры ${chamberNumber} с породой ${woodTypeEnglish}`;
@@ -457,13 +509,7 @@ async function saveSyncLogs(logs: SyncLog[]): Promise<void> {
     const timestamp = new Date().toISOString();
     const logKey = `sync_log_${timestamp}`;
     
-    await kv.set(logKey, {
-      timestamp,
-      logs,
-      count: logs.length,
-    });
-    
-    console.log(`[GoogleSheets] Логи сохранены: ${logKey}`);
+    console.log('[GoogleSheets] (Legacy) Sync logs ignored');
   } catch (error) {
     console.error('[GoogleSheets] Ошибка сохранения логов:', error);
   }
@@ -474,14 +520,22 @@ async function saveSyncLogs(logs: SyncLog[]): Promise<void> {
  */
 export async function getRecentSyncLogs(limit: number = 10): Promise<any[]> {
   try {
-    const allLogs = await kv.getByPrefix("sync_log_");
-    
-    // Сортируем по времени (новые первые)
-    const sorted = allLogs.sort((a: any, b: any) => 
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-    
-    return sorted.slice(0, limit);
+    const { data, error } = await supabase
+      .from('processed_rows')
+      .select('*')
+      .order('processed_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return (data || []).map(row => ({
+      timestamp: row.processed_at,
+      action: 'sync',
+      rowNumber: row.row_number,
+      success: true,
+      message: `Row ${row.row_number} processed successfully`,
+      details: row.details
+    }));
   } catch (error) {
     console.error('[GoogleSheets] Ошибка получения логов:', error);
     return [];
@@ -494,10 +548,13 @@ export async function getRecentSyncLogs(limit: number = 10): Promise<any[]> {
  */
 export async function isRowProcessed(rowNumber: number): Promise<boolean> {
   try {
-    const processed = await kv.get(`processed_row_${rowNumber}`);
-    console.log(`[GoogleSheets] isRowProcessed(${rowNumber}): kv.get вернул:`, processed);
-    // Проверяем и null и undefined
-    return processed != null;  // Используем != вместо !== чтобы проверить оба случая
+    const { data } = await supabase
+      .from('processed_rows')
+      .select('row_number')
+      .eq('row_number', rowNumber)
+      .maybeSingle();
+
+    return !!data;
   } catch (error) {
     console.error('[GoogleSheets] Ошибка проверки обработанной строки:', error);
     return false;
@@ -509,10 +566,13 @@ export async function isRowProcessed(rowNumber: number): Promise<boolean> {
  */
 export async function markRowAsProcessed(rowNumber: number, details: any): Promise<void> {
   try {
-    await kv.set(`processed_row_${rowNumber}`, {
-      processedAt: new Date().toISOString(),
-      details,
-    });
+    await supabase
+      .from('processed_rows')
+      .upsert({
+         row_number: rowNumber,
+         processed_at: new Date().toISOString(),
+         details: JSON.stringify(details)
+      });
     console.log(`[GoogleSheets] Строка ${rowNumber} помечена как обработанная`);
   } catch (error) {
     console.error('[GoogleSheets] Ошибка при пометке строки:', error);
