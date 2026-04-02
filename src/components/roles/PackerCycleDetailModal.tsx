@@ -71,7 +71,10 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     try {
       const updatedCycle = await api.updateCycle(cycle.id, {
         overallComment: editedComment,
-        resultPhotos: editedResultPhotos,
+        resultPhotos: editedResultPhotos.map(p => ({
+          ...p,
+          url: (p.url && p.url.startsWith('blob:')) ? '' : p.url
+        })),
       });
 
       toast.success(t('saved'));
