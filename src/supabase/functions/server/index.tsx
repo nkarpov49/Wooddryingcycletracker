@@ -33,16 +33,16 @@ const BUCKET_NAME = "make-c5bcdb1f-drying-chamber-photos";
 // Helpers
 async function ensureBucket() {
   try {
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
-      if (!bucketExists) {
-        await supabase.storage.createBucket(BUCKET_NAME, {
-          public: false,
-          fileSizeLimit: 10485760, // 10MB
-        });
-      }
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(bucket => bucket.name === BUCKET_NAME);
+    if (!bucketExists) {
+      await supabase.storage.createBucket(BUCKET_NAME, {
+        public: false,
+        fileSizeLimit: 10485760, // 10MB
+      });
+    }
   } catch (e) {
-      console.error("Bucket check failed:", e);
+    console.error("Bucket check failed:", e);
   }
 }
 
@@ -64,7 +64,7 @@ async function signCycleUrls(cycle: any) {
     const { data } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(cycle.recipePhotoPath, 3600 * 24);
     cycle.recipePhotoUrl = data?.signedUrl;
   }
-  
+
   if (cycle.recipePhotos && Array.isArray(cycle.recipePhotos)) {
     for (const photo of cycle.recipePhotos) {
       if (!photo.path && photo.url && photo.url.includes(BUCKET_NAME)) {
@@ -77,7 +77,7 @@ async function signCycleUrls(cycle: any) {
       }
     }
   }
-  
+
   if (cycle.resultPhotos && Array.isArray(cycle.resultPhotos)) {
     for (const photo of cycle.resultPhotos) {
       if (!photo.path && photo.url && photo.url.includes(BUCKET_NAME)) {
@@ -108,10 +108,10 @@ routes.get('/work-cycles', async (c) => {
 
     // 🔹 1. Получаем циклы из SQL
     const { data, error } = await supabase
-  .from('cycles')
-  .select('*')
-  .is('end_date', null) // ✅ только незавершенные
-  .order('created_at', { ascending: false });
+      .from('cycles')
+      .select('*')
+      .is('end_date', null) // ✅ только незавершенные
+      .order('created_at', { ascending: false });
 
     // 🔹 2. Обработка ошибки SQL
     if (error) {
@@ -139,7 +139,7 @@ routes.get('/work-cycles', async (c) => {
       startDate: row.start_date, // дата начала
       endDate: row.end_date, // дата окончания
     }));
-    
+
 
     // 🔹 5. Сортировка (новые сверху)
     cycles.sort((a, b) =>
@@ -169,41 +169,37 @@ routes.get('/work-cycles', async (c) => {
 // - JSON поля работают (photos, weighing_history)
 // - Backend теперь готов к масштабированию
 // ✅ Преобразование frontend → SQL (camelCase → snake_case)
-const toDb = (data: any) => ({
-  // ❗ БЕЗ ...data
+const toDb = (data: any) => {
+  const cleanPhotos = (photos: any[]) => {
+    if (!Array.isArray(photos)) return [];
+    return photos.map(p => ({
+      ...p,
+      // ❗ КРИТИЧНО: Никогда не сохраняем blob ссылки в базу
+      url: (p.url && p.url.startsWith('blob:')) ? '' : p.url
+    }));
+  };
 
-  final_moisture: data.finalMoisture,
-  quality_rating: data.qualityRating,
-
-  result_photos: Array.isArray(data.resultPhotos) 
-  ? data.resultPhotos 
-  : [],
-
-  start_temperature: data.loadingTemp,
-  avg_day_temp: data.avgDayTemp,
-  avg_night_temp: data.avgNightTemp,
-
-  chamber_number: data.chamberNumber,
-  sequential_number: data.sequentialNumber,
-
-  wood_type_lt: data.woodTypeLt, 
-
-  start_date: data.startDate,
-  end_date: data.endDate,
-
-  recipe_photos: Array.isArray(data.recipePhotos)
-  ? data.recipePhotos
-  : [],
-
-  overall_comment: data.overallComment,
-  is_test: data.isTest,
-
-  avg_temp: data.avgTemp,
-  max_temp: data.maxTemp,
-  min_temp: data.minTemp,
-
-  weighed_at: data.weighedAt
-});
+  return {
+    final_moisture: data.finalMoisture,
+    quality_rating: data.qualityRating,
+    result_photos: cleanPhotos(data.resultPhotos),
+    start_temperature: data.loadingTemp,
+    avg_day_temp: data.avgDayTemp,
+    avg_night_temp: data.avgNightTemp,
+    chamber_number: data.chamberNumber,
+    sequential_number: data.sequentialNumber,
+    wood_type_lt: data.woodTypeLt,
+    start_date: data.startDate,
+    end_date: data.endDate,
+    recipe_photos: cleanPhotos(data.recipePhotos),
+    overall_comment: data.overallComment,
+    is_test: data.isTest,
+    avg_temp: data.avgTemp,
+    max_temp: data.maxTemp,
+    min_temp: data.minTemp,
+    weighed_at: data.weighedAt
+  };
+};
 
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
@@ -286,13 +282,19 @@ const fromDb = (data: any) => {
   };
 };
 
+
 routes.get('/cycles/active', async (c) => {
   const { data, error } = await supabase
-  .from('cycles')
-  .select('*')
-  .eq('status', 'In Progress'); // 🔥 ВОТ ЭТО
+    .from('cycles')
+    .select('*')
+    .eq('status', 'In Progress');
 
-  return c.json(data);
+  if (error) return c.json({ error: error.message }, 500);
+
+  const mapped = (data || []).map(fromDb);
+  const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
+
+  return c.json(signed);
 });
 
 routes.get('/cycles', async (c) => {
@@ -310,8 +312,10 @@ routes.get('/cycles', async (c) => {
     // ✅ snake_case → camelCase
     const mapped = data.map(fromDb);
 
-    // ✅ ПРОСТО возвращаем
-    return c.json(mapped);
+    // 🔥 ПОДПИСЫВАЕМ все ссылки для всех циклов в списке
+    const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
+
+    return c.json(signed);
 
   } catch (error: any) {
     console.error('[Cycles] ❌ Ошибка:', error);
@@ -334,35 +338,6 @@ routes.get('/cycles/:id', async (c) => {
     }
 
     const cycle = fromDb(data);
-
-    // 🔄 Подтягиваем историю взвешиваний из связанной таблицы
-    const { data: weighingData, error: weighingError } = await supabase
-      .from('weighing_records')
-      .select('*')
-      .eq('cycle_id', id)
-      .order('timestamp', { ascending: true });
-      
-    if (!weighingError && weighingData) {
-      // Преобразуем SQL snake_case поля в camelCase для старого фронтенда
-      cycle.weighingHistory = weighingData.map((w: any) => ({
-        id: w.id,
-        timestamp: w.timestamp,
-        weights: w.weights || [],
-        weightLimit: w.weight_limit,
-        hoursFromStart: w.hours_from_start,
-        recommendation: w.recommendation,
-        recommendationData: w.recommendation_data,
-        endTime: w.end_time,
-        currentTime: w.current_time_value,
-        dryingHours: w.drying_hours,
-        hoursNeeded: w.hours_needed,
-        avgOverweight: w.avg_overweight,
-        approved: w.approved,
-        warmupTime: w.warmup_time,
-      }));
-    } else {
-      cycle.weighingHistory = [];
-    }
 
     // 🔥 ВОЗВРАЩАЕМ ЭТО ОБРАТНО
     const signedCycle = await signCycleUrls(cycle);
@@ -427,54 +402,23 @@ routes.put('/cycles/:id', async (c) => {
 
     // 🔄 Маппим входящие данные
     const mappedBody = Object.fromEntries(
-  Object.entries(toDb(body)).filter(([_, v]) => v !== undefined)
-);
-// 🛡 нормализация даты
-if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
-  if (/^\d{2}:\d{2}$/.test(mappedBody.end_date)) {
-    const now = new Date();
-    const [h, m] = mappedBody.end_date.split(':').map(Number);
+      Object.entries(toDb(body)).filter(([_, v]) => v !== undefined)
+    );
+    // 🛡 нормализация даты
+    if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
+      if (/^\d{2}:\d{2}$/.test(mappedBody.end_date)) {
+        const now = new Date();
+        const [h, m] = mappedBody.end_date.split(':').map(Number);
 
-    now.setHours(h);
-    now.setMinutes(m);
-    now.setSeconds(0);
+        now.setHours(h);
+        now.setMinutes(m);
+        now.setSeconds(0);
 
-    mappedBody.end_date = now.toISOString();
-  }
-}
-    // ✅ ИЗВЛЕЧЕНИЕ weighingResult ДЛЯ SQL
-    let weighed_at = existing.weighed_at;
-    if (body.weighingResult) {
-      const wr = body.weighingResult;
-      const { error: insertError } = await supabase
-        .from('weighing_records')
-        .insert([{
-          cycle_id: id,
-          timestamp: wr.timestamp || new Date().toISOString(),
-          weights: wr.weights || [],
-          weight_limit: wr.weightLimit || null,
-          hours_from_start: wr.hoursFromStart || null,
-          recommendation: null, // Legacy text
-          recommendation_data: wr.recommendationData || null,
-          end_time: wr.endTime || null,
-          current_time_value: wr.currentTime || null,
-          drying_hours: wr.dryingHours || null,
-          hours_needed: wr.hoursNeeded || null,
-          avg_overweight: wr.avgOverweight || null,
-          approved: wr.approved || false,
-          warmup_time: wr.warmupTime || null
-        }]);
-        
-      if (insertError) {
-        console.error('[SQL] Ошибка вставки взвешивания:', insertError);
-      } else {
-        console.log('[SQL] Взвешивание успешно сохранено');
-        weighed_at = wr.timestamp || new Date().toISOString();
+        mappedBody.end_date = now.toISOString();
       }
     }
-
     // 🧠 Объединяем (как раньше в KV)
-    const updated = { ...existing, ...mappedBody, weighed_at };
+    const updated = { ...existing, ...mappedBody };
 
     // ✅ ЛОГИКА СТАТУСА (исправлена под SQL)
     const hasFinalMoisture =
@@ -500,7 +444,6 @@ if (mappedBody.end_date && typeof mappedBody.end_date === 'string') {
       .from('cycles')
       .update({
         ...mappedBody,
-        weighed_at: updated.weighed_at,
         status: updated.status
       })
       .eq('id', id);
@@ -691,13 +634,13 @@ routes.post('/weather', async (c) => {
     const { startDate, endDate } = await c.req.json();
 
     const startStr = startDate.split('T')[0];
-const endStr = endDate.split('T')[0];
+    const endStr = endDate.split('T')[0];
 
-const { data, error } = await supabase
-  .from('weather')
-  .select('*')
-  .gte('date', startStr + 'T00:00:00')
-  .lte('date', endStr + 'T23:59:59');
+    const { data, error } = await supabase
+      .from('weather')
+      .select('*')
+      .gte('date', startStr + 'T00:00:00')
+      .lte('date', endStr + 'T23:59:59');
 
     if (error) {
       return c.json({ error: error.message }, 500);
@@ -1113,14 +1056,14 @@ routes.post('/sheets/process-row', async (c) => {
 
     // ✅ ВАЛИДАЦИЯ (простая и надежная)
     if (
-  !rowNumber ||
-  !chamberNumber ||
-  !body.oldSequentialNumber ||
-  !body.newSequentialNumber ||
-  !body.oldCycleEndDate ||
-  !body.newCycleStartDate ||
-  !body.woodTypeLithuanian
-) {
+      !rowNumber ||
+      !chamberNumber ||
+      !body.oldSequentialNumber ||
+      !body.newSequentialNumber ||
+      !body.oldCycleEndDate ||
+      !body.newCycleStartDate ||
+      !body.woodTypeLithuanian
+    ) {
       console.log('[Sheets] ❌ Ошибка валидации:', body);
 
       return c.json({
@@ -1165,8 +1108,8 @@ routes.get('/sheets/sync-logs', async (c) => {
   try {
     const limit = parseInt(c.req.query('limit') || '10');
     const logs = await getRecentSyncLogs(limit);
-    
-    return c.json({ 
+
+    return c.json({
       success: true,
       logs,
       count: logs.length
@@ -1192,7 +1135,7 @@ routes.get('/sheets/row-status/:rowNumber', async (c) => {
       return c.json({ error: error.message }, 500);
     }
 
-    return c.json({ 
+    return c.json({
       processed: !!data,
       data
     });
@@ -1206,18 +1149,18 @@ routes.get('/sheets/row-status/:rowNumber', async (c) => {
 routes.delete('/sheets/reset-row/:rowNumber', async (c) => {
   try {
     const rowNumber = parseInt(c.req.param('rowNumber'));
-    
+
     console.log(`[Sheets] Сброс статуса строки ${rowNumber}`);
-    
+
     // Удаляем метку обработки ✅ 
     await supabase
-  .from('processed_rows')
-  .delete()
-  .eq('row_number', rowNumber);
-    
-    return c.json({ 
-      success: true, 
-      message: `Статус строки ${rowNumber} сброшен. Теперь её можно обработать снова.` 
+      .from('processed_rows')
+      .delete()
+      .eq('row_number', rowNumber);
+
+    return c.json({
+      success: true,
+      message: `Статус строки ${rowNumber} сброшен. Теперь её можно обработать снова.`
     });
   } catch (error: any) {
     console.error('[Sheets] Ошибка сброса статуса строки:', error);
@@ -1237,7 +1180,7 @@ routes.get('/sheets/processed-rows', async (c) => {
       return c.json({ error: error.message }, 500);
     }
 
-    return c.json({ 
+    return c.json({
       rows: data,
       count: data.length
     });
@@ -1259,7 +1202,7 @@ routes.post('/sheets/clear-processed', async (c) => {
       return c.json({ error: error.message }, 500);
     }
 
-    return c.json({ 
+    return c.json({
       success: true,
       message: 'Все строки очищены'
     });
@@ -1278,19 +1221,19 @@ routes.delete('/sheets/remove-duplicates/:sequentialNumber', async (c) => {
 routes.post('/sheets/manual-sync', async (c) => {
   try {
     const body = await c.req.json() as GoogleSheetRow;
-    
+
     console.log('[Sheets] Запущена ручная синхронизация:', body);
-    
+
     // Обрабатываем синхронно для ручного режима
     await processSheetRow(body);
     await markRowAsProcessed(body.rowNumber, body);
-    
-    return c.json({ 
-      success: true, 
+
+    return c.json({
+      success: true,
       message: 'Синхронизация завершена',
-      rowNumber: body.rowNumber 
+      rowNumber: body.rowNumber
     });
-    
+
   } catch (error: any) {
     console.error('[Sheets] Ошибка ручной синхронизации:', error);
     return c.json({ error: error.message }, 500);
@@ -1576,8 +1519,26 @@ routes.post('/send-telegram-weighing', async (c) => {
       return c.json({ error: 'Цикл не найден' }, 404);
     }
 
-    // ✅ 3. Взвешивание УЖЕ сохранено в основном роуте PUT /cycles/:id
-    // Пропускаем дублирующий INSERT INTO weighing_records
+    // ✅ 3. Сохраняем взвешивание
+    const { data: insertData, error: insertError } = await supabase
+      .from('weighing_records')
+      .insert({
+        cycle_id: cycleId,
+        timestamp: weighingRecord.timestamp || new Date().toISOString(),
+        weights: weighingRecord.weights || [],
+        weight_limit: weighingRecord.weightLimit,
+        hours_from_start: weighingRecord.hoursFromStart,
+        recommendation: weighingRecord.recommendation,
+        recommendation_data: weighingRecord.recommendationData
+      })
+      .select();
+
+    if (insertError) {
+      console.error('❌ INSERT ERROR:', insertError);
+      return c.json({ error: insertError.message }, 500);
+    }
+
+    console.log('✅ INSERT OK:', insertData);
 
     // ✅ 4. Предыдущее взвешивание (SQL вместо weighingHistory)
     const { data: previousWeighings } = await supabase
@@ -1680,11 +1641,11 @@ routes.post('/send-telegram-weighing', async (c) => {
     }
 
     // ✅ 11. Сообщение
-    const message = `<b>📦 ${cycle.chamber_number}</b>
+    const message = `<b>📦 ${cycle.chamberNumber}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
-🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
+🌲 ${cycle.wood_type_lt} (#${cycle.sequentialNumber})
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
@@ -1722,7 +1683,7 @@ ${boxList}${changeInfo}${recommendationText}`.trim();
     return c.json({ error: error.message }, 500);
   }
 });
-    
+
 
 routes.post('/test-telegram', async (c) => {
   try {
@@ -1780,8 +1741,8 @@ app.get('/health', (c) => {
 });
 
 app.get('/', (c) => {
-  return c.json({ 
-    status: "ok", 
+  return c.json({
+    status: "ok",
     message: "DryTrack API Server",
     version: "1.0.0",
     endpoints: [
