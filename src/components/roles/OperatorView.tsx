@@ -33,17 +33,7 @@ export default function OperatorView() {
     const data = await api.getActiveCycles();
     console.log('ACTIVE CYCLES:', data);
 
-    const mappedCycles = data.map((c: any) => ({
-      ...c,
-      chamberNumber: c.chamber_number,
-      startDate: c.start_date,
-      woodType: c.wood_type_lt,
-      sequentialNumber: c.sequential_number,
-      recipePhotos: c.recipe_photos,
-      recipePhotoPath: c.recipe_photo_path,
-    }));
-
-    setCycles(mappedCycles);
+    setCycles(data);
   } catch (e) {
     toast.error(t('error'));
   } finally {
