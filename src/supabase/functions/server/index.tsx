@@ -204,11 +204,22 @@ const toDb = (data: any) => {
 // ✅ Преобразование SQL → frontend (snake_case → camelCase)
 const fromDb = (data: any) => {
   const safeArray = (v: any) => {
-    if (Array.isArray(v)) return v;
-    if (typeof v === 'string') {
-      try { return JSON.parse(v); } catch { return []; }
+    // ❗ ИСПРАВЛЕНИЕ: База данных иногда возвращает "дважды упакованный" JSON (строка в строке)
+    // Разбираем строку, пока не получим массив или пока не перестанет парситься
+    let result = v;
+    let attempts = 0;
+    while (typeof result === 'string' && attempts < 5) {
+      try {
+        const parsed = JSON.parse(result);
+        // Если результат парсинга НЕ строка и НЕ массив, это какая-то ошибка (например, число)
+        if (typeof parsed !== 'string' && !Array.isArray(parsed)) break;
+        result = parsed;
+        attempts++;
+      } catch {
+        break;
+      }
     }
-    return [];
+    return Array.isArray(result) ? result : [];
   };
 
   return {
