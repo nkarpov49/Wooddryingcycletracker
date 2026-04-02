@@ -1649,11 +1649,11 @@ routes.post('/send-telegram-weighing', async (c) => {
     }
 
     // ✅ 11. Сообщение
-    const message = `<b>📦 ${cycle.chamber_number}</b>
+    const message = `<b>📦 ${cycle.chamberNumber}</b>
 
 📅 ${lithuanianTime}
 ⏱ ${hoursFromStart}val nuo pradžios
-🌲 ${cycle.wood_type_lt} (#${cycle.sequential_number})
+🌲 ${cycle.wood_type_lt} (#${cycle.sequentialNumber})
 🎯 Tikslas: ${weightLimit}t/dėžė
 
 <b>Rezultatas:</b>
