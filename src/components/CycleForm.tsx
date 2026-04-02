@@ -296,8 +296,16 @@ export default function CycleForm() {
       // Status Logic: Completed if End Date is present
       const status: 'In Progress' | 'Completed' = formData.endDate ? 'Completed' : 'In Progress';
       
-      // Ensure legacy fields are populated from first recipe photo
-      const primaryRecipePhoto = formData.recipePhotos?.[0];
+      const cleanPhotos = (photos: CyclePhoto[]) => {
+        return (photos || []).map(p => ({
+          ...p,
+          url: (p.url && p.url.startsWith('blob:')) ? '' : p.url
+        }));
+      };
+
+      const cleanedRecipePhotos = cleanPhotos(formData.recipePhotos || []);
+      const cleanedResultPhotos = cleanPhotos(formData.resultPhotos || []);
+      const primaryRecipePhoto = cleanedRecipePhotos[0];
 
       const cycleData = {
         ...formData,
@@ -306,9 +314,11 @@ export default function CycleForm() {
         chamberNumber: Number(formData.chamberNumber),
         woodType: formData.woodType === 'Other' ? formData.customWoodType || 'Other' : formData.woodType,
         startDate: formData.startDate || new Date().toISOString(),
-        // Sync legacy fields
+        // Sync legacy fields (cleaned)
         recipePhotoPath: primaryRecipePhoto?.path || '',
         recipePhotoUrl: primaryRecipePhoto?.url || '',
+        recipePhotos: cleanedRecipePhotos,
+        resultPhotos: cleanedResultPhotos,
       } as DryingCycle;
 
       if (id) {
