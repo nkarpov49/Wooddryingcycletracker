@@ -461,6 +461,11 @@ console.log('[Weighing] ✅ Backend success');
 
       console.log('[Weighing] ✅ Backend ответил успешно');
       
+      // 2. Отправляем уведомление в Telegram (не дожидаясь ответа, чтобы не блокировать интерфейс)
+      api.sendWeighingToTelegram(selectedChamber.id, newWeighingRecord).catch((tgError) => {
+        console.error('[Weighing] ❌ Ошибка отправки в Telegram:', tgError);
+      });
+      
       toast.success(t('saved'));
       setSelectedChamber(null);
       fetchActiveChambers();
