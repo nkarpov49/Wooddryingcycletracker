@@ -22,8 +22,6 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
     return 'bg-amber-50 text-amber-800 border-amber-100';
   };
 
-  const hasRecipePhoto = cycle.recipePhotoPath || (cycle.recipePhotos && cycle.recipePhotos.length > 0);
-  const hasResultPhoto = cycle.resultPhotos && cycle.resultPhotos.length > 0;
   const hasComment = cycle.overallComment && cycle.overallComment.trim().length > 0;
   const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
   
@@ -38,6 +36,10 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
   const ratingBgColor = cycle.qualityRating && cycle.qualityRating < 3 
     ? 'bg-red-50 border-red-200' 
     : 'bg-white border-gray-200';
+
+  const recipePhotoCount = (cycle.recipePhotos?.length || 0) || (cycle.recipePhotoPath ? 1 : 0);
+  const resultPhotoCount = cycle.resultPhotos?.length || 0;
+  const totalPhotos = recipePhotoCount + resultPhotoCount;
 
   return (
     <button 
@@ -115,12 +117,10 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
         )}
 
         {/* Photos Indicator */}
-        {(hasRecipePhoto || hasResultPhoto) && (
+        {totalPhotos > 0 && (
           <div className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded font-bold">
             <ImageIcon className="w-3 h-3" />
-            <span>
-              {(cycle.recipePhotos?.length || 0) + (cycle.resultPhotos?.length || 0)}
-            </span>
+            <span>{totalPhotos}</span>
           </div>
         )}
       </div>
