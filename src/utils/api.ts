@@ -230,13 +230,8 @@ export const api = {
   },
   
   async getCurrentWork() {
-  const res = await fetch('https://zbhvgsdiagwvpdvqvzsc.supabase.co/functions/v1/make-server-c5bcdb1f/sheets/current-work');
-  const data = await res.json();
-
-  console.log("[API] RAW current work:", data);
-
-  return data; // ✅ ВАЖНО: без []
-},
+    return fetchWithAuth(`${BASE_URL}/sheets/current-work`);
+  },
   
   // Telegram Settings
   getTelegramSettings: async () => {
