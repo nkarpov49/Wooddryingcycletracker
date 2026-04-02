@@ -80,7 +80,7 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
       toast.success(t('saved'));
 
       if (onUpdate) {
-        onUpdate({ ...cycle, ...updatedCycle });
+        onUpdate(updatedCycle);
       }
 
       // Закрываем модальное окно после сохранения
