@@ -37,8 +37,8 @@ export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps
     ? 'bg-red-50 border-red-200' 
     : 'bg-white border-gray-200';
 
-  const recipePhotoCount = (cycle.recipePhotos?.length || 0) || (cycle.recipePhotoPath ? 1 : 0);
-  const resultPhotoCount = cycle.resultPhotos?.length || 0;
+  const recipePhotoCount = (Array.isArray(cycle.recipePhotos) ? cycle.recipePhotos.length : 0) || (cycle.recipePhotoPath ? 1 : 0);
+  const resultPhotoCount = Array.isArray(cycle.resultPhotos) ? cycle.resultPhotos.length : 0;
   const totalPhotos = recipePhotoCount + resultPhotoCount;
 
   return (
