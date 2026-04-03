@@ -3,6 +3,7 @@ import { DryingCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO, differenceInHours } from 'date-fns';
 import { Calendar, Droplets, MessageSquare, Image as ImageIcon, Star, Scale } from 'lucide-react';
+import { getWoodStyle } from '../../utils/wood-styles';
 
 interface PackerCycleCardProps {
   cycle: DryingCycle;
@@ -12,15 +13,6 @@ interface PackerCycleCardProps {
 export default function PackerCycleCard({ cycle, onClick }: PackerCycleCardProps) {
   const { t } = useLanguage();
 
-  const getWoodStyle = (woodType: string) => {
-    const type = (woodType || '').toLowerCase();
-    if (type.includes('birch')) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (type.includes('oak')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    if (type.includes('alder')) return 'bg-gray-100 text-gray-800 border-gray-200';
-    if (type.includes('maple') || type.includes('ash')) return 'bg-green-100 text-green-800 border-green-200';
-    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
-    return 'bg-amber-50 text-amber-800 border-amber-100';
-  };
 
   const hasComment = cycle.overallComment && cycle.overallComment.trim().length > 0;
   const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
