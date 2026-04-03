@@ -2,7 +2,7 @@ import React from 'react';
 import { CurrentWorkCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO } from 'date-fns';
-import { MessageSquare, Image as ImageIcon, Eye, AlertCircle } from 'lucide-react';
+import { MessageSquare, Image as ImageIcon, Eye, AlertCircle, Scale } from 'lucide-react';
 import { getWoodStyle } from '../../utils/wood-styles';
 
 interface CurrentWorkCardProps {
@@ -45,6 +45,7 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
   const hasRecipePhoto = cycle.recipePhotos && cycle.recipePhotos.length > 0;
   const hasResultPhoto = cycle.resultPhotos && cycle.resultPhotos.length > 0;
   const hasComment = cycle.overallComment && cycle.overallComment.trim().length > 0;
+  const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
 
   return (
     <button
@@ -93,6 +94,14 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
 
       {/* Action Buttons - КОМПАКТНО */}
       <div className="flex items-center gap-1.5 pt-2.5 border-t border-gray-200">
+        {/* Weighing Data Indicator */}
+        {hasWeighingData && (
+          <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-lg font-bold border border-indigo-100 shadow-sm">
+            <Scale className="w-3.5 h-3.5" />
+            <span>{cycle.weighingHistory?.length}</span>
+          </div>
+        )}
+
         {hasComment && (
           <div className="flex items-center gap-1 text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-bold">
             <MessageSquare className="w-3 h-3" />
