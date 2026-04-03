@@ -3,39 +3,39 @@
 
 export const LITHUANIAN_TO_ENGLISH: Record<string, string> = {
   // Береза
-  'Beržas235': 'Birch235',
-  'Beržas285': 'Birch285',
-  'Berzas235': 'Birch235',  // без диакритики
-  'Berzas285': 'Birch285',
+  'Beržas235': 'Beržas 235',
+  'Beržas285': 'Beržas 285',
+  'Berzas235': 'Berzas 235',  // без диакритики
+  'Berzas285': 'Berzas 285',
   
   // Ольха
-  'Alksnis235': 'Alder235',
-  'JAlksnis235': 'Alder235',  // J = желтая ольха
-  'BAlksnis235': 'Alder235',  // B = белая ольха
+  'Alksnis235': 'Alksnis 235',
+  'JAlksnis235': 'Alksnis 235',  // J = желтая ольха
+  'BAlksnis235': 'Alksnis 235',  // B = белая ольха
   
   // Дуб
-  'Ąžuolas235': 'Oak235',
-  'Azuolas235': 'Oak235',  // без диакритики
+  'Ąžuolas235': 'Ąžuolas 235',
+  'Azuolas235': 'Ąžuolas 235',  // без диакритики
   
   // Ясень
-  'Uosis235': 'Ash235',
+  'Uosis235': 'Uosis 235',
   
   // Клён
-  'Klevas235': 'Maple235',
+  'Klevas235': 'Klevas 235',
   
   // Скробла (граб?)
-  'Skroblas235': 'Scroblas235',
+  'Skroblas235': 'Scroblas 235',
 };
 
 // Обратный маппинг для отображения
 export const ENGLISH_TO_LITHUANIAN: Record<string, string> = {
-  'Birch235': 'Beržas235',
-  'Birch285': 'Beržas285',
-  'Alder235': 'Alksnis235',
-  'Oak235': 'Ąžuolas235',
-  'Ash235': 'Uosis235',
-  'Maple235': 'Klevas235',
-  'Scroblas235': 'Skroblas235',
+  'Birch235': 'Beržas 235',
+  'Birch285': 'Beržas 285',
+  'Alder235': 'Alksnis 235',
+  'Oak235': 'Ąžuolas 235',
+  'Ash235': 'Uosis 235',
+  'Maple235': 'Klevas 235',
+  'Scroblas235': 'Skroblas 235',
 };
 
 // Все допустимые английские типы для валидации
