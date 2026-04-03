@@ -93,6 +93,72 @@ async function signCycleUrls(cycle: any) {
   return cycle;
 }
 
+// ⚡ ЭФФЕКТИВНАЯ ПАКЕТНАЯ ПОДПИСЬ ФОТОГРАФИЙ
+async function signCyclesList(cycles: any[]) {
+  if (!cycles || cycles.length === 0) return cycles;
+
+  // 1. Собираем все уникальные пути
+  const pathSet = new Set<string>();
+  cycles.forEach(cycle => {
+    if (cycle.recipePhotoPath) pathSet.add(cycle.recipePhotoPath);
+    
+    if (Array.isArray(cycle.recipePhotos)) {
+      cycle.recipePhotos.forEach((p: any) => { if (p.path) pathSet.add(p.path); });
+    }
+    
+    if (Array.isArray(cycle.resultPhotos)) {
+      cycle.resultPhotos.forEach((p: any) => { if (p.path) pathSet.add(p.path); });
+    }
+  });
+
+  const allPaths = Array.from(pathSet);
+  if (allPaths.length === 0) return cycles;
+
+  // 2. Запрашиваем подписанные URL пачкой (по 100 штук за раз)
+  const urlMap = new Map<string, string>();
+  const BATCH_SIZE = 100;
+  
+  for (let i = 0; i < allPaths.length; i += BATCH_SIZE) {
+    const batch = allPaths.slice(i, i + BATCH_SIZE);
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrls(batch, 3600 * 24);
+      
+    if (error) {
+      console.error('[Storage] Batch signing error:', error);
+      continue;
+    }
+    
+    data?.forEach(item => {
+      if (item.signedUrl) {
+        // Supabase returns relative path in item.path, match it with our original path
+        urlMap.set(item.path, item.signedUrl);
+      }
+    });
+  }
+
+  // 3. Расставляем ссылки обратно по объектам
+  cycles.forEach(cycle => {
+    if (cycle.recipePhotoPath) {
+      cycle.recipePhotoUrl = urlMap.get(cycle.recipePhotoPath) || cycle.recipePhotoUrl;
+    }
+    
+    if (Array.isArray(cycle.recipePhotos)) {
+      cycle.recipePhotos.forEach((p: any) => {
+        if (p.path) p.url = urlMap.get(p.path) || p.url;
+      });
+    }
+    
+    if (Array.isArray(cycle.resultPhotos)) {
+      cycle.resultPhotos.forEach((p: any) => {
+        if (p.path) p.url = urlMap.get(p.path) || p.url;
+      });
+    }
+  });
+
+  return cycles;
+}
+
 // Вспомогательная функция для массовой загрузки взвешиваний
 async function attachWeighingsToCycles(cycles: any[]) {
   if (!cycles || cycles.length === 0) return cycles;
@@ -181,8 +247,11 @@ routes.get('/work-cycles', async (c) => {
 
     console.log(`[WorkCycles] ✅ Возвращаем ${cycles.length} циклов`);
 
-    // 🔹 6. Возвращаем результат
-    return c.json(cycles);
+    // 🔹 6. Подписываем фото (пакетно для скорости)
+    const signed = await signCyclesList(cycles);
+
+    // 🔹 7. Возвращаем результат
+    return c.json(signed);
 
   } catch (error: any) {
     console.error("[WorkCycles] ❌ Критическая ошибка:", error);
@@ -379,7 +448,10 @@ routes.get('/cycles', async (c) => {
     // ⚡ ОПТИМИЗАЦИЯ: загружаем взвешивания, но НЕ генерируем ссылки на фото
     const withWeighings = await attachWeighingsToCycles(mapped);
 
-    return c.json(withWeighings);
+    // 🔥 ПАКЕТНО подписываем все фото (теперь это быстро!)
+    const signed = await signCyclesList(withWeighings);
+
+    return c.json(signed);
 
   } catch (error: any) {
     console.error('[Cycles] ❌ Ошибка:', error);
