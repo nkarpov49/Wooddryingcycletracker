@@ -282,7 +282,8 @@ const fromDb = (data: any) => {
     // Дополнительные поля
     weighedAt: data.weighed_at || null,
 
-    // Примечание: weighingHistory загружается отдельно в getCycle по ID
+    // ✅ ДОБАВЛЕНО: История взвешиваний (заполняется отдельно в роутах по необходимости)
+    weighingHistory: [],
   };
 };
 
@@ -331,6 +332,7 @@ routes.get('/cycles/:id', async (c) => {
   try {
     const id = c.req.param("id");
 
+    // 1. Получаем сам цикл
     const { data, error } = await supabase
       .from('cycles')
       .select('*')
@@ -342,6 +344,28 @@ routes.get('/cycles/:id', async (c) => {
     }
 
     const cycle = fromDb(data);
+
+    // 2. ✅ ДОБАВЛЕНО: Получаем историю взвешиваний из отдельной таблицы
+    const { data: weighings, error: weightError } = await supabase
+      .from('weighing_records')
+      .select('*')
+      .eq('cycle_id', id)
+      .order('timestamp', { ascending: true });
+
+    if (!weightError && weighings) {
+      cycle.weighingHistory = weighings.map(w => ({
+        timestamp: w.timestamp,
+        weights: w.weights || [],
+        totalWeight: (w.weights || []).reduce((a: number, b: number) => a + b, 0),
+        weightLimit: w.weight_limit,
+        hoursFromStart: w.hours_from_start,
+        recommendation: w.recommendation,
+        recommendationData: w.recommendation_data,
+        driverName: w.driver_name
+      }));
+    } else {
+      cycle.weighingHistory = [];
+    }
 
     // 🔥 ВОЗВРАЩАЕМ ЭТО ОБРАТНО
     const signedCycle = await signCycleUrls(cycle);
