@@ -196,12 +196,11 @@ export default function OperatorView() {
   const getWoodStyle = (woodType: string) => {
     const type = (woodType || '').toLowerCase();
     // Минималистичные цвета для пожилых людей
-    if (type.includes('beržas')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('ąžuolas')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('alksnis')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('klevas')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('uosis')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('skroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
+    if (type.includes('birch')) return 'bg-slate-100 text-slate-800 border-slate-300';
+    if (type.includes('oak')) return 'bg-slate-100 text-slate-800 border-slate-300';
+    if (type.includes('alder')) return 'bg-slate-100 text-slate-800 border-slate-300';
+    if (type.includes('maple') || type.includes('ash')) return 'bg-slate-100 text-slate-800 border-slate-300';
+    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
     return 'bg-slate-100 text-slate-800 border-slate-300';
   };
 
