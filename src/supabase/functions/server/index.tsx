@@ -213,7 +213,10 @@ const toDb = (data: any) => {
   };
 
   return {
-    final_moisture: data.finalMoisture,
+    // 🛡 СТРАХОВКА: Игнорируем влажность 20% и выше (очевидная ошибка формулы)
+    final_moisture: (typeof data.finalMoisture === 'number' && data.finalMoisture >= 20) 
+      ? null 
+      : data.finalMoisture,
     quality_rating: data.qualityRating,
     result_photos: cleanPhotos(data.resultPhotos),
     start_temperature: data.startTemperature ?? data.loadingTemp, // Поддержка обоих вариантов
@@ -1007,7 +1010,8 @@ routes.post('/sheets/update-current-work', async (c) => {
         if (parts.length >= 4 && parts[3]) {
           const mStr = parts[3].replace(/[%]/g, '').trim();
           const mVal = parseFloat(mStr);
-          if (!isNaN(mVal)) {
+          // 🛡 СТРАХОВКА: Не принимаем мусорные значения >= 20%
+          if (!isNaN(mVal) && mVal < 20) {
             moisture = mVal;
           }
         }
