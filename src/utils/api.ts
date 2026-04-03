@@ -19,6 +19,7 @@ export interface CyclePhoto {
 }
 
 export interface WeighingRecord {
+  id: string; // ✅ Уникальный идентификатор записи в базе данных
   timestamp: string; // ISO дата и время взвешивания
   hoursFromStart: number; // Часов с момента старта цикла
   hoursSinceLastCheck?: number; // Часов с последней проверки (если не первое)
