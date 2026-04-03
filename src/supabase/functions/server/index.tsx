@@ -342,8 +342,9 @@ routes.get('/cycles/active', async (c) => {
   if (error) return c.json({ error: error.message }, 500);
 
   const mapped = (data || []).map(fromDb);
-  const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
-  const withWeighings = await attachWeighingsToCycles(signed);
+  // ⚡ ОПТИМИЗАЦИЯ: В списках НЕ генерируем signedUrl для каждого фото,
+  // чтобы не было проблемы "Too many requests" к Supabase.
+  const withWeighings = await attachWeighingsToCycles(mapped);
 
   return c.json(withWeighings);
 });
@@ -363,9 +364,8 @@ routes.get('/cycles', async (c) => {
     // ✅ snake_case → camelCase
     const mapped = data.map(fromDb);
 
-    // 🔥 ПОДПИСЫВАЕМ все ссылки и ЗАГРУЖАЕМ взвешивания
-    const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
-    const withWeighings = await attachWeighingsToCycles(signed);
+    // ⚡ ОПТИМИЗАЦИЯ: загружаем взвешивания, но НЕ генерируем ссылки на фото
+    const withWeighings = await attachWeighingsToCycles(mapped);
 
     return c.json(withWeighings);
 
@@ -955,18 +955,8 @@ routes.get('/sheets/current-work', async (c) => {
       await attachWeighingsToCycles(cyclesToEnrich);
     }
 
-    await Promise.all(
-      Object.keys(currentWork).map(async (key) => {
-        const work = currentWork[key];
-        if (work?.cycle) {
-          try {
-            work.cycle = await signCycleUrls(work.cycle);
-          } catch (e) {
-            console.error('[Sheets] Ошибка подписания URL:', e);
-          }
-        }
-      })
-    );
+    // ⚡ ОПТИМИЗАЦИЯ: пропускаем массовую подпись URL для фото (signCycleUrls)
+    // в дашборде Лидера, так как там отображается только количество фото.
 
     console.log("RESULT currentWork:", JSON.stringify(currentWork, null, 2));
 
