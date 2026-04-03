@@ -864,6 +864,11 @@ routes.get('/sheets/current-work', async (c) => {
       avgTemp: cycle.avg_temp,
       maxTemp: cycle.max_temp,
       minTemp: cycle.min_temp,
+      
+      // ✅ ДОБАВЛЕНО: для показа значков на главном экране
+      finalMoisture: cycle.final_moisture,
+      qualityRating: cycle.quality_rating,
+      isFailed: cycle.is_failed,
 
       status: getStatus(cycle)
     });
@@ -981,19 +986,29 @@ routes.post('/sheets/update-current-work', async (c) => {
 
     console.log('BODY:', body);
 
-    // 🔥 ПАРСИНГ СТРОКИ
-    const parseLine = (text: string | null) => {
-      if (!text) return null;
-
-      const parts = text.split('/').map(p => p.trim());
-
-      if (parts.length < 3) return null;
-
-      return {
-        raw_text: text,
-        sequential_number: parts[2] // ← ВАЖНО
+      // 🔥 ПАРСИНГ СТРОКИ (извлекаем sequential_number и влажность)
+      const parseLine = (text: string | null) => {
+        if (!text) return null;
+  
+        const parts = text.split('/').map(p => p.trim());
+        if (parts.length < 3) return null;
+        
+        // Попытка получить влажность, если она есть (4-ый элемент, например "12%")
+        let moisture: number | null = null;
+        if (parts.length >= 4 && parts[3]) {
+          const mStr = parts[3].replace(/[%]/g, '').trim();
+          const mVal = parseFloat(mStr);
+          if (!isNaN(mVal)) {
+            moisture = mVal;
+          }
+        }
+  
+        return {
+          raw_text: text,
+          sequential_number: parts[2], // ← ВАЖНО
+          moisture
+        };
       };
-    };
 
     const line1 = parseLine(body.line1);
     const line2 = parseLine(body.line2);
@@ -1013,21 +1028,24 @@ routes.post('/sheets/update-current-work', async (c) => {
     if (line1) {
       updates.push({
         line_number: 1,
-        ...line1
+        raw_text: line1.raw_text,
+        sequential_number: line1.sequential_number
       });
     }
 
     if (line2) {
       updates.push({
         line_number: 2,
-        ...line2
+        raw_text: line2.raw_text,
+        sequential_number: line2.sequential_number
       });
     }
 
     if (line3) {
       updates.push({
         line_number: 3,
-        ...line3
+        raw_text: line3.raw_text,
+        sequential_number: line3.sequential_number
       });
     }
 
@@ -1044,6 +1062,27 @@ routes.post('/sheets/update-current-work', async (c) => {
         success: false,
         message: error.message
       });
+    }
+
+    // 🔥 ОБНОВЛЕНИЕ ВЛАЖНОСТИ В ТАБЛИЦЕ ЦИКЛОВ
+    const moistureUpdates = [line1, line2, line3].filter(l => l && l.moisture !== null);
+    
+    for (const update of moistureUpdates) {
+      if (update) {
+        // Нормализуем номер цикла для уверенности
+        const seqNum = String(update.sequential_number).replace('#', '').trim();
+        
+        const { error: moistureError } = await supabase
+          .from('cycles')
+          .update({ final_moisture: update.moisture })
+          .eq('sequential_number', seqNum);
+          
+        if (moistureError) {
+          console.error(`❌ SQL ERROR [Moisture Update] for cycle ${seqNum}:`, moistureError);
+        } else {
+          console.log(`💧 Влажность обновлена: Цикл #${seqNum} -> ${update.moisture}%`);
+        }
+      }
     }
 
     return c.json({
