@@ -5,6 +5,7 @@ import { toast } from 'sonner@2.0.3';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../utils/i18n';
+import { getWoodStyle } from '../../utils/wood-styles';
 
 export default function OperatorView() {
   const { logout } = useAuth();
@@ -193,16 +194,6 @@ export default function OperatorView() {
     }
   };
 
-  const getWoodStyle = (woodType: string) => {
-    const type = (woodType || '').toLowerCase();
-    // Минималистичные цвета для пожилых людей
-    if (type.includes('birch')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('oak')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('alder')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('maple') || type.includes('ash')) return 'bg-slate-100 text-slate-800 border-slate-300';
-    if (type.includes('scroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
-    return 'bg-slate-100 text-slate-800 border-slate-300';
-  };
 
   const openLightbox = (index: number) => {
     setCurrentPhotoIndex(index);
