@@ -2,7 +2,7 @@ import React from 'react';
 import { CurrentWorkCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO } from 'date-fns';
-import { MessageSquare, Image as ImageIcon, Eye, AlertCircle, Scale } from 'lucide-react';
+import { MessageSquare, Image as ImageIcon, Eye, AlertCircle, Scale, Droplets } from 'lucide-react';
 import { getWoodStyle } from '../../utils/wood-styles';
 
 interface CurrentWorkCardProps {
@@ -94,6 +94,14 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
 
       {/* Action Buttons - КОМПАКТНО */}
       <div className="flex items-center gap-1.5 pt-2.5 border-t border-gray-200">
+        {/* Moisture Indicator */}
+        {cycle.finalMoisture !== undefined && cycle.finalMoisture !== null && (
+          <div className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-lg font-bold border border-blue-100 shadow-sm">
+            <Droplets className="w-3.5 h-3.5" />
+            <span>{cycle.finalMoisture}%</span>
+          </div>
+        )}
+
         {/* Weighing Data Indicator */}
         {hasWeighingData && (
           <div className="flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-lg font-bold border border-indigo-100 shadow-sm">
