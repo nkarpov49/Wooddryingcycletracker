@@ -272,7 +272,8 @@ routes.get('/work-cycles', async (c) => {
 // - Backend теперь готов к масштабированию
 // ✅ Преобразование frontend → SQL (camelCase → snake_case)
 const toDb = (data: any) => {
-  const cleanPhotos = (photos: any[]) => {
+  const cleanPhotos = (photos: any[] | undefined) => {
+    if (photos === undefined) return undefined;
     if (!Array.isArray(photos)) return [];
     return photos.map(p => ({
       ...p,
