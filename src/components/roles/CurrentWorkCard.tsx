@@ -76,7 +76,7 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
       </div>
 
       {/* Wood Type - КОМПАКТНО */}
-      <div className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold border uppercase tracking-wide mb-2.5 ${Style(cycle.woodType)}`}>
+      <div className={`inline-block px-2.5 py-1 rounded-lg text-xs font-bold border uppercase tracking-wide mb-2.5 ${getWoodStyle(cycle.woodType)}`}>
         {cycle.woodType || t('other')}
       </div>
 
