@@ -42,7 +42,7 @@ export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: Curre
   }
 
   const cycle = workCycle.cycle;
-  const hasRecipePhoto = cycle.recipePhotos && cycle.recipePhotos.length > 0;
+  const hasRecipePhoto = (cycle.recipePhotos && cycle.recipePhotos.length > 0) || !!cycle.recipePhotoPath;
   const hasResultPhoto = cycle.resultPhotos && cycle.resultPhotos.length > 0;
   const hasComment = cycle.overallComment && cycle.overallComment.trim().length > 0;
   const hasWeighingData = cycle.weighingHistory && cycle.weighingHistory.length > 0;
