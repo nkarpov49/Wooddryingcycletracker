@@ -93,6 +93,51 @@ async function signCycleUrls(cycle: any) {
   return cycle;
 }
 
+// Вспомогательная функция для массовой загрузки взвешиваний
+async function attachWeighingsToCycles(cycles: any[]) {
+  if (!cycles || cycles.length === 0) return cycles;
+
+  const ids = cycles.map(c => c.id);
+
+  // Получаем все взвешивания для списка циклов одним запросом
+  const { data: weighings, error } = await supabase
+    .from('weighing_records')
+    .select('*')
+    .in('cycle_id', ids)
+    .order('timestamp', { ascending: true });
+
+  if (error) {
+    console.error('[SQL] Ошибка загрузки взвешиваний для списка:', error);
+    return cycles;
+  }
+
+  // Группируем взвешивания по cycle_id
+  const weighingMap = new Map();
+  (weighings || []).forEach((w: any) => {
+    if (!weighingMap.has(w.cycle_id)) {
+      weighingMap.set(w.cycle_id, []);
+    }
+    weighingMap.get(w.cycle_id).push({
+      id: w.id,
+      timestamp: w.timestamp,
+      weights: w.weights || [],
+      totalWeight: (w.weights || []).reduce((a: number, b: number) => a + b, 0),
+      weightLimit: w.weight_limit,
+      hoursFromStart: w.hours_from_start,
+      recommendation: w.recommendation,
+      recommendationData: w.recommendation_data,
+      driverName: w.driver_name
+    });
+  });
+
+  // Прикрепляем взвешивания к циклам
+  cycles.forEach(cycle => {
+    cycle.weighingHistory = weighingMap.get(cycle.id) || [];
+  });
+
+  return cycles;
+}
+
 // API Routes
 const routes = new Hono();
 
@@ -298,8 +343,9 @@ routes.get('/cycles/active', async (c) => {
 
   const mapped = (data || []).map(fromDb);
   const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
+  const withWeighings = await attachWeighingsToCycles(signed);
 
-  return c.json(signed);
+  return c.json(withWeighings);
 });
 
 routes.get('/cycles', async (c) => {
@@ -317,10 +363,11 @@ routes.get('/cycles', async (c) => {
     // ✅ snake_case → camelCase
     const mapped = data.map(fromDb);
 
-    // 🔥 ПОДПИСЫВАЕМ все ссылки для всех циклов в списке
+    // 🔥 ПОДПИСЫВАЕМ все ссылки и ЗАГРУЖАЕМ взвешивания
     const signed = await Promise.all(mapped.map(cycle => signCycleUrls(cycle)));
+    const withWeighings = await attachWeighingsToCycles(signed);
 
-    return c.json(signed);
+    return c.json(withWeighings);
 
   } catch (error: any) {
     console.error('[Cycles] ❌ Ошибка:', error);
@@ -354,6 +401,7 @@ routes.get('/cycles/:id', async (c) => {
 
     if (!weightError && weighings) {
       cycle.weighingHistory = weighings.map(w => ({
+        id: w.id, // ✅ КРИТИЧНО: без этого не работает удаление!
         timestamp: w.timestamp,
         weights: w.weights || [],
         totalWeight: (w.weights || []).reduce((a: number, b: number) => a + b, 0),
@@ -879,11 +927,21 @@ routes.get('/sheets/current-work', async (c) => {
 
     currentWork.timestamp = timestamp;
 
-    // 7. подписываем URL
+    // 7. подписываем URL и ЗАГРУЖАЕМ взвешивания
+    const cyclesToEnrich: any[] = [];
+    Object.keys(currentWork).forEach(key => {
+      if (currentWork[key]?.cycle) {
+        cyclesToEnrich.push(currentWork[key].cycle);
+      }
+    });
+
+    if (cyclesToEnrich.length > 0) {
+      await attachWeighingsToCycles(cyclesToEnrich);
+    }
+
     await Promise.all(
       Object.keys(currentWork).map(async (key) => {
         const work = currentWork[key];
-
         if (work?.cycle) {
           try {
             work.cycle = await signCycleUrls(work.cycle);
