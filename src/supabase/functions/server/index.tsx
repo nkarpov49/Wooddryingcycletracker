@@ -351,10 +351,19 @@ routes.get('/cycles/active', async (c) => {
 
 routes.get('/cycles', async (c) => {
   try {
-    const { data, error } = await supabase
+    const seqNum = c.req.query('sequentialNumber');
+    
+    let query = supabase
       .from('cycles')
-      .select('*')
-      .order('created_at', { ascending: false });
+      .select('*');
+
+    if (seqNum) {
+      // Очищаем номер от '#' если он пришел в таком виде
+      const cleanNum = String(seqNum).replace('#', '').trim();
+      query = query.eq('sequential_number', cleanNum);
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       console.error('[SQL] Ошибка получения циклов:', error);
