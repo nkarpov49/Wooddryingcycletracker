@@ -581,6 +581,22 @@ routes.delete('/weighings/:id', async (c) => {
   });
 });
 
+// ✅ ДОБАВЛЕНО ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ (Fix 404 Error)
+// Эти роуты нужны, если в браузере пользователя закеширована старая версия фронтенда
+routes.delete('/cycles/:id/weighing-history', async (c) => {
+  const cycleId = c.req.param('id');
+  const { error } = await supabase.from('weighing_records').delete().eq('cycle_id', cycleId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ success: true, message: 'All weighings deleted (legacy route)' });
+});
+
+routes.delete('/cycles/:cycleId/weighing-history/:recordId', async (c) => {
+  const recordId = c.req.param('recordId');
+  const { data, error } = await supabase.from('weighing_records').delete().eq('id', recordId).select().single();
+  if (error || !data) return c.json({ error: 'Not found' }, 404);
+  return c.json({ success: true, message: 'Record deleted (legacy route)', deleted: data });
+});
+
 
 routes.delete('/cycles/:id', async (c) => {
   try {
