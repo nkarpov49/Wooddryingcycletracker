@@ -4,6 +4,7 @@ import { useLanguage } from '../../utils/i18n';
 import { format, parseISO, differenceInHours } from 'date-fns';
 import { X, Calendar, Droplets, Star, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight, Save, Camera, Upload, Trash2, Plus, Scale } from 'lucide-react';
 import { api } from '../../utils/api';
+import { getWoodStyle } from '../../utils/wood-styles';
 import { toast } from 'sonner';
 import PhotoZoomViewer from '../PhotoZoomViewer';
 
@@ -32,14 +33,6 @@ export default function PackerCycleDetailModal({ cycle, onClose, onUpdate, allow
     setEditedResultPhotos(cycle.resultPhotos || []);
   }, [cycle.id, cycle.overallComment, cycle.resultPhotos]);
 
-  const getWoodStyle = (woodType: string) => {
-    const type = (woodType || '').toLowerCase();
-    if (type.includes('birch')) return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (type.includes('oak')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    if (type.includes('alder')) return 'bg-gray-100 text-gray-800 border-gray-200';
-    if (type.includes('maple') || type.includes('ash')) return 'bg-green-100 text-green-800 border-green-200';
-    return 'bg-amber-50 text-amber-800 border-amber-100';
-  };
 
   // Формируем список фото рецепта (массив или одиночное фото из старых полей)
   let allRecipePhotos = cycle.recipePhotos || [];
