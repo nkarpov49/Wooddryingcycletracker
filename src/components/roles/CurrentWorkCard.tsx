@@ -3,6 +3,7 @@ import { CurrentWorkCycle } from '../../utils/api';
 import { useLanguage } from '../../utils/i18n';
 import { format, parseISO } from 'date-fns';
 import { MessageSquare, Image as ImageIcon, Eye, AlertCircle } from 'lucide-react';
+import { getWoodStyle } from '../../utils/wood-styles';
 
 interface CurrentWorkCardProps {
   workCycle: CurrentWorkCycle;
@@ -12,25 +13,6 @@ interface CurrentWorkCardProps {
 
 export default function CurrentWorkCard({ workCycle, lineLabel, onClick }: CurrentWorkCardProps) {
   const { t } = useLanguage();
-
-  const getWoodStyle = (woodType: string) => {
-    const type = (woodType || '').toLowerCase();
-    
-    // Beržas (Береза) - синий
-    if (type.includes('birch') || type.includes('beržas')) return 'bg-blue-100 text-blue-800 border-blue-200';
-    // Ąžuolas (Дуб) - желтый
-    if (type.includes('oak') || type.includes('ąžuolas')) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    // Alksnis (Ольха) - серый
-    if (type.includes('alder') || type.includes('alksnis')) return 'bg-gray-100 text-gray-800 border-gray-200';
-    // Klevas / Uosis (Клен / Ясень) - зеленый
-    if (type.includes('maple') || type.includes('klevas') || type.includes('ash') || type.includes('uosis')) {
-        return 'bg-green-100 text-green-800 border-green-200';
-    }
-    // Skroblas (Граб) - белый
-    if (type.includes('scroblas') || type.includes('skroblas')) return 'bg-white text-gray-800 border-gray-300 shadow-sm';
-    // Все остальное - янтарный
-    return 'bg-amber-50 text-amber-800 border-amber-100';
-};
 
 
   // Если цикл не найден в базе
