@@ -16,8 +16,8 @@ export default function PasswordGate({ children }: PasswordGateProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
-    // Проверяем сохраненную сессию
-    const savedAuth = sessionStorage.getItem('app_authenticated');
+    // Проверяем сохраненную сессию (localStorage — работает во всех вкладках)
+    const savedAuth = localStorage.getItem('app_authenticated');
     if (savedAuth === 'true') {
       setIsAuthenticated(true);
     }
@@ -45,7 +45,7 @@ export default function PasswordGate({ children }: PasswordGateProps) {
       const data = await response.json();
 
       if (data.success) {
-        sessionStorage.setItem('app_authenticated', 'true');
+        localStorage.setItem('app_authenticated', 'true');
         setIsAuthenticated(true);
         setPassword('');
       } else {
