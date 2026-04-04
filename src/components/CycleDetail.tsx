@@ -7,7 +7,6 @@ import { toast } from 'sonner@2.0.3';
 import { useLanguage } from "../utils/i18n";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAuth } from '../contexts/AuthContext';
-import AdvancedPhotoGallery from './AdvancedPhotoGallery';
 import PhotoZoomViewer from './PhotoZoomViewer';
 
 export default function CycleDetail() {
@@ -515,9 +514,8 @@ export default function CycleDetail() {
         </div>
       </div>
 
-      {/* Advanced Photo Gallery Modal */}
       {fullscreenPhoto !== null && (
-        <AdvancedPhotoGallery
+        <PhotoZoomViewer
           photos={allPhotos}
           initialIndex={fullscreenPhoto}
           onClose={() => setFullscreenPhoto(null)}
